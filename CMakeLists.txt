@@ -28,21 +28,21 @@ add_library(jazelle_reader_core STATIC
 )
 target_include_directories(jazelle_reader_core PUBLIC include src)
 
-find_package(Cython REQUIRED MODULE)
-
-cython_add_module(_core
-    SRC
-    src/jazelle/jazelle_cython.pyx
+skbuild_add_python_module(
+    jazelle._core  # The full name of the module: "jazelle._core"
+    SOURCES
+        # Point to the .cpp file that scikit-build-core generates
+        src/jazelle/jazelle_cython.cpp 
 )
 
 # Link the Cython module to your C++ static library
-target_link_libraries(_core PRIVATE
+target_link_libraries(jazelle._core PRIVATE
     Python::Module
     jazelle_reader_core
 )
 
 # Tell CMake where to find your .pxd and .hpp files
-target_include_directories(_core PRIVATE
+target_include_directories(jazelle._core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/jazelle # For the .pxd
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
