@@ -57,25 +57,25 @@ set_target_properties(jazelle_reader_core PROPERTIES POSITION_INDEPENDENT_CODE O
 # ------------------------------------------------------------------
 #  2. Create the Python extension module
 # ------------------------------------------------------------------
-Python_add_library(_core MODULE
+Python_add_library(jazelle_cython MODULE
     ${CYTHON_OUTPUT}
 )
 
 # Set the output name to match what Python expects
-set_target_properties(_core PROPERTIES
-    OUTPUT_NAME "_core"
+set_target_properties(jazelle_cython PROPERTIES
+    OUTPUT_NAME "jazelle_cython"
     PREFIX ""  # No 'lib' prefix on Unix
 )
 
 # ------------------------------------------------------------------
 #  3. Link the Cython module to your C++ static library
 # ------------------------------------------------------------------
-target_link_libraries(_core PRIVATE
+target_link_libraries(jazelle_cython PRIVATE
     jazelle_reader_core
 )
 
 # Tell CMake where to find your .pxd and .hpp files
-target_include_directories(_core PRIVATE
+target_include_directories(jazelle_cython PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/jazelle
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -85,6 +85,6 @@ target_include_directories(_core PRIVATE
 # ------------------------------------------------------------------
 #  4. Install the extension module to the jazelle package
 # ------------------------------------------------------------------
-install(TARGETS _core
+install(TARGETS jazelle_cython
         LIBRARY DESTINATION jazelle
         RUNTIME DESTINATION jazelle)
