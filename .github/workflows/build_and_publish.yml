@@ -70,7 +70,10 @@ jobs:
           
       - name: Move wheels to top-level dist/
         run: find dist -type f -name "*.whl" -exec mv {} dist/ \;
-        
+      
+      - name: Remove empty artifact directories
+        run: rm -rf dist/wheels-*
+      
       - name: List wheels (for debugging)
         run: ls -l dist/
 
