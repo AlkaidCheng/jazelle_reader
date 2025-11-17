@@ -67,7 +67,10 @@ jobs:
           # No 'name' provided = download ALL artifacts from this workflow run
           # This will download 'wheels-ubuntu-latest', 'wheels-windows-latest', etc.
           path: dist/ # And put them all into a single 'dist' directory
-      
+          
+      - name: Move wheels to top-level dist/
+        run: find dist -type f -name "*.whl" -exec mv {} dist/ \;
+        
       - name: List wheels (for debugging)
         run: ls -l dist/
 
