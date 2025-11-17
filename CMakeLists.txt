@@ -7,15 +7,13 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ------------------------------------------------------------------
-#  IMPORTANT: Import scikit-build-core's CMake utilities
+#  Find Python - required for building Python extensions
 # ------------------------------------------------------------------
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
-include("${SKBUILD_CMAKE_MODULE_DIR}/init.cmake")
 
 # ------------------------------------------------------------------
 #  1. Build your C++ static library (as before)
 # ------------------------------------------------------------------
-# I recommend renaming it to avoid conflicts with the Python module
 add_library(jazelle_reader_core STATIC
     src/JazelleFile.cpp
     src/JazelleStream.cpp
@@ -35,34 +33,42 @@ add_library(jazelle_reader_core STATIC
 target_include_directories(jazelle_reader_core PUBLIC include src)
 
 # ------------------------------------------------------------------
-#  2. Add the Cython-generated Python module
+#  2. Create the Python extension module
 # ------------------------------------------------------------------
-skbuild_add_python_module(
-    jazelle._core  # The full name of the module: "jazelle._core"
-    SOURCES
-        # Point to the .cpp file that scikit-build-core generates
-        src/jazelle/jazelle_cython.cpp 
+Python_add_library(_core MODULE
+    src/jazelle/jazelle_cython.cpp
+)
+
+# Set the output name to match what Python expects
+set_target_properties(_core PROPERTIES
+    OUTPUT_NAME "_core"
+    PREFIX ""  # No 'lib' prefix on Unix
 )
 
 # ------------------------------------------------------------------
 #  3. Link the Cython module to your C++ static library
 # ------------------------------------------------------------------
-target_link_libraries(jazelle._core PRIVATE
-    Python::Module
+target_link_libraries(_core PRIVATE
     jazelle_reader_core
 )
 
 # Tell CMake where to find your .pxd and .hpp files
-target_include_directories(jazelle._core PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/jazelle # For the .pxd
+target_include_directories(_core PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/jazelle
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 # ------------------------------------------------------------------
-#  4. Install the C++ headers (Optional, but good practice)
+#  4. Install the extension module to the jazelle package
 # ------------------------------------------------------------------
-# This isn't needed for pip install, but is good for packaging
+install(TARGETS _core
+        LIBRARY DESTINATION jazelle
+        RUNTIME DESTINATION jazelle)
+
+# ------------------------------------------------------------------
+#  5. Install the C++ headers (Optional, but good practice)
+# ------------------------------------------------------------------
 install(
     DIRECTORY include/jazelle
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
