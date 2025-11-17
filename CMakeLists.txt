@@ -23,6 +23,7 @@ add_custom_command(
     COMMAND ${Python_EXECUTABLE} -m cython 
             --cplus 
             -3
+            -I ${CMAKE_CURRENT_SOURCE_DIR}/src/jazelle
             ${CYTHON_SOURCE}
             -o ${CYTHON_OUTPUT}
     DEPENDS ${CYTHON_SOURCE}
