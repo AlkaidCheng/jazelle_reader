@@ -49,7 +49,7 @@ jobs:
   publish_to_pypi:
     name: Publish wheels to PyPI
     runs-on: ubuntu-latest
-
+    environment: pypi 
     # 1. This job MUST wait for all builds to finish
     needs: build_wheels 
 
