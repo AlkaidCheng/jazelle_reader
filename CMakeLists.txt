@@ -52,6 +52,8 @@ add_library(jazelle_reader_core STATIC
 )
 target_include_directories(jazelle_reader_core PUBLIC include src)
 
+set_target_properties(jazelle_reader_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # ------------------------------------------------------------------
 #  2. Create the Python extension module
 # ------------------------------------------------------------------
