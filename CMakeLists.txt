@@ -12,7 +12,26 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 
 # ------------------------------------------------------------------
-#  1. Build your C++ static library (as before)
+#  Cythonize the .pyx file
+# ------------------------------------------------------------------
+set(CYTHON_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/jazelle/jazelle_cython.pyx)
+set(CYTHON_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/jazelle_cython.cpp)
+
+# Use Python to run Cython
+add_custom_command(
+    OUTPUT ${CYTHON_OUTPUT}
+    COMMAND ${Python_EXECUTABLE} -m cython 
+            --cplus 
+            -3
+            ${CYTHON_SOURCE}
+            -o ${CYTHON_OUTPUT}
+    DEPENDS ${CYTHON_SOURCE}
+    COMMENT "Cythonizing ${CYTHON_SOURCE}"
+    VERBATIM
+)
+
+# ------------------------------------------------------------------
+#  1. Build your C++ static library
 # ------------------------------------------------------------------
 add_library(jazelle_reader_core STATIC
     src/JazelleFile.cpp
@@ -36,7 +55,7 @@ target_include_directories(jazelle_reader_core PUBLIC include src)
 #  2. Create the Python extension module
 # ------------------------------------------------------------------
 Python_add_library(_core MODULE
-    src/jazelle/jazelle_cython.cpp
+    ${CYTHON_OUTPUT}
 )
 
 # Set the output name to match what Python expects
@@ -57,6 +76,7 @@ target_include_directories(_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/jazelle
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${Python_INCLUDE_DIRS}
 )
 
 # ------------------------------------------------------------------
