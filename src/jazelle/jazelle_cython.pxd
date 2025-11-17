@@ -1,0 +1,164 @@
+# python/jazelle_cython.pxd
+#
+# This is the "header" file for Cython. It declares the C++
+# API that we want to access.
+
+from libcpp.string cimport string
+from libcpp.memory cimport unique_ptr
+from libcpp.optional cimport optional
+from libc.stdint cimport int16_t, int32_t, int64_t
+from libcpp.chrono cimport system_clock, time_point
+
+# --- Utility Structs (from banks/*.hpp) ---
+
+cdef extern from "jazelle/banks/PIDVEC.hpp" namespace "jazelle":
+    cdef cppclass PIDVEC:
+        PIDVEC()
+        float e, mu, pi, k, p
+
+cdef extern from "jazelle/banks/CRIDHYP.hpp" namespace "jazelle":
+    cdef cppclass CRIDHYP:
+        CRIDHYP()
+        bint m_full
+        int16_t rc, nhits
+        int32_t besthyp
+        int16_t nhexp, nhfnd, nhbkg, mskphot
+        optional[PIDVEC] llik
+
+# --- Bank Structs (from banks/*.hpp) ---
+# We must declare all bank structs we want to wrap.
+
+cdef extern from "jazelle/Bank.hpp" namespace "jazelle":
+    cdef cppclass Bank:
+        Bank(int32_t)
+        int32_t getId()
+
+cdef extern from "jazelle/banks/IEVENTH.hpp" namespace "jazelle":
+    cdef cppclass IEVENTH(Bank):
+        IEVENTH()
+        int32_t header, run, event, evttype, trigger
+        float weight
+        system_clock.time_point evttime
+
+cdef extern from "jazelle/banks/MCHEAD.hpp" namespace "jazelle":
+    cdef cppclass MCHEAD(Bank):
+        MCHEAD(int32_t)
+        int32_t ntot, origin
+        float ipx, ipy, ipz
+
+cdef extern from "jazelle/banks/MCPART.hpp" namespace "jazelle":
+    cdef cppclass MCPART(Bank):
+        MCPART(int32_t)
+        float e, ptot, charge
+        int32_t ptype, origin, parent_id
+        float p[3]
+        float xt[3]
+
+cdef extern from "jazelle/banks/PHPSUM.hpp" namespace "jazelle":
+    cdef cppclass PHPSUM(Bank):
+        PHPSUM(int32_t)
+        float px, py, pz, x, y, z, charge
+        int32_t status
+        double getPTot()
+
+cdef extern from "jazelle/banks/PHCHRG.hpp" namespace "jazelle":
+    cdef cppclass PHCHRG(Bank):
+        PHCHRG(int32_t)
+        float hlxpar[6]
+        float dhlxpar[15]
+        float bnorm, impact, b3norm, impact3
+        int16_t charge, smwstat
+        int32_t status
+        float tkpar0
+        float tkpar[5]
+        float dtkpar[15]
+        float length, chi2dt
+        int16_t imc, ndfdt, nhit, nhite, nhitp, nmisht, nwrght, nhitv
+        float chi2, chi2v
+        int32_t vxdhit
+        int16_t mustat, estat
+        int32_t dedx
+
+cdef extern from "jazelle/banks/PHKLUS.hpp" namespace "jazelle":
+    cdef cppclass PHKLUS(Bank):
+        PHKLUS(int32_t)
+        int32_t status, nhit2, nhit3
+        float eraw, cth, wcth, phi, wphi
+        float elayer[8]
+        float cth2, wcth2, phi2, whphi2
+        float cth3, wcth3, phi3, wphi3
+
+cdef extern from "jazelle/banks/PHWIC.hpp" namespace "jazelle":
+    cdef cppclass PHWIC(Bank):
+        PHWIC(int32_t)
+        int16_t idstat, nhit, nhit45, npat, nhitpat, syshit
+        float qpinit, t1, t2, t3
+        int32_t hitmiss
+        float itrlen
+        int16_t nlayexp, nlaybey
+        float missprob
+        int32_t phwicid, hitsused
+        int16_t nhitshar, nother
+        float pref1[3]
+        float pfit[4]
+        float dpfit[10]
+        float chi2
+        int16_t ndf, punfit
+        float matchChi2
+        int16_t matchNdf
+
+cdef extern from "jazelle/banks/PHCRID.hpp" namespace "jazelle":
+    cdef cppclass PHCRID(Bank):
+        PHCRID(int32_t)
+        int32_t ctlword
+        float norm
+        int16_t rc, geom, trkp, nhits
+        CRIDHYP liq, gas
+        PIDVEC llik
+
+cdef extern from "jazelle/banks/PHKTRK.hpp" namespace "jazelle":
+    cdef cppclass PHKTRK(Bank):
+        PHKTRK(int32_t)
+        pass # Stub bank
+
+cdef extern from "jazelle/banks/PHKELID.hpp" namespace "jazelle":
+    cdef cppclass PHKELID(Bank):
+        PHKELID(int32_t)
+        PHCHRG* phchrg # The linked bank
+        int16_t idstat, prob
+        float phi, theta, qp, dphi, dtheta, dqp
+        float tphi, ttheta, isolat, em1, em12, dem12, had1
+        float emphi, emtheta, phiwid, thewid
+        float em1x1, em2x2a, em2x2b, em3x3a, em3x3b
+
+# --- Main Event Container ---
+
+cdef extern from "jazelle/JazelleEvent.hpp" namespace "jazelle":
+    cdef cppclass JazelleEvent:
+        JazelleEvent() except +
+        void clear()
+        IEVENTH ieventh
+
+        # Convenience finders
+        MCHEAD* findMCHEAD(int32_t id)
+        MCPART* findMCPART(int32_t id)
+        PHPSUM* findPHPSUM(int32_t id)
+        PHCHRG* findPHCHRG(int32_t id)
+        PHKLUS* findPHKLUS(int32_t id)
+        PHWIC* findPHWIC(int32_t id)
+        PHCRID* findPHCRID(int32_t id)
+        PHKTRK* findPHKTRK(int32_t id)
+        PHKELID* findPHKELID(int32_t id)
+
+# --- Main File Reader ---
+
+cdef extern from "jazelle/JazelleFile.hpp" namespace "jazelle":
+    cdef cppclass JazelleFile:
+        JazelleFile(string& filepath) except +
+        bint nextRecord(JazelleEvent& event) except +
+        bint readEvent(int32_t index, JazelleEvent& event) except +
+        int32_t getTotalEvents() except +
+        string getFileName()
+        system_clock.time_point getCreationDate()
+        system_clock.time_point getModifiedDate()        
+        string getLastRecordType()
