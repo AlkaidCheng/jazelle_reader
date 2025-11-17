@@ -18,7 +18,7 @@ jobs:
           
           # Skip musllinux builds for Python 3.8-3.9 (GCC too old for C++20)
           # Keep manylinux (glibc-based) which has newer GCC
-          CIBW_SKIP: "cp38-musllinux_* cp39-musllinux_*"
+          CIBW_SKIP: "cp38-musllinux_* cp39-musllinux_* cp310-musllinux_* cp311-musllinux_* cp312-musllinux_*"
           
           # Optional: Increase build verbosity for debugging
           CIBW_BUILD_VERBOSITY: 1
