@@ -3,7 +3,6 @@
 [build-system]
 requires = [
     "scikit-build-core>=0.7",  # The build system
-    "cmake",                   # C++ build dependency
     "cython>=3.0"              # Cython build dependency
 ]
 build-backend = "scikit_build_core.build"

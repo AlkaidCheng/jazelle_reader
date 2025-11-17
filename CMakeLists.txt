@@ -29,12 +29,6 @@ add_library(jazelle_reader_core STATIC
 target_include_directories(jazelle_reader_core PUBLIC include src)
 
 # ------------------------------------------------------------------
-#  2. Find Python & Cython (provided by scikit-build-core)
-# ------------------------------------------------------------------
-find_package(Python REQUIRED COMPONENTS Interpreter Development)
-find_package(Cython REQUIRED)
-
-# ------------------------------------------------------------------
 #  3. Build the Cython Extension
 # ------------------------------------------------------------------
 # This tells scikit-build-core to create the Python extension module
