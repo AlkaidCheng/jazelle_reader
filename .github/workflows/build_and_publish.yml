@@ -1,0 +1,77 @@
+# .github/workflows/build_and_publish.yml
+name: Build and Publish
+
+# Run on pushes and PRs (for testing), and on release (for publishing)
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  release:
+    types: [created] # This is the trigger for publishing
+
+jobs:
+  # ----------------------------------------
+  # JOB 1: Build the Wheels (Your original job)
+  # ----------------------------------------
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.16.5
+        env:
+          # Build for Python 3.8-3.12
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-*"
+          
+          # Skip all musllinux builds (simplified from your original)
+          CIBW_SKIP: "*-musllinux_*"
+          
+          # Optional: Increase build verbosity for debugging
+          CIBW_BUILD_VERBOSITY: 1
+          
+      - uses: actions/upload-artifact@v4
+        with:
+          # Your original config is perfect.
+          # This creates separate artifacts: wheels-ubuntu-latest, wheels-windows-latest, etc.
+          name: wheels-${{ matrix.os }}
+          path: ./wheelhouse/*.whl
+
+  # ----------------------------------------
+  # JOB 2: Publish to PyPI
+  # ----------------------------------------
+  publish_to_pypi:
+    name: Publish wheels to PyPI
+    runs-on: ubuntu-latest
+
+    # 1. This job MUST wait for all builds to finish
+    needs: build_wheels 
+
+    # 2. This job ONLY runs when a new release is created
+    if: github.event_name == 'release' && github.event.action == 'created'
+
+    # 3. This permission is REQUIRED for Trusted Publishing
+    permissions:
+      id-token: write # Grant permission to get an OIDC token
+
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          # No 'name' provided = download ALL artifacts from this workflow run
+          # This will download 'wheels-ubuntu-latest', 'wheels-windows-latest', etc.
+          path: dist/ # And put them all into a single 'dist' directory
+      
+      - name: List wheels (for debugging)
+        run: ls -l dist/
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # No 'user' or 'password' needed! The action handles OIDC auth.
+        
