@@ -528,7 +528,7 @@ cdef class JazelleEvent:
     or JazelleFile.readEvent().
     """
     # This class *owns* the C++ object
-    cdef pxd.JazelleEvent cpp_event
+    cdef pxd.CppJazelleEvent cpp_event  # Changed from JazelleEvent
     
     def __cinit__(self):
         # Default constructor is called
@@ -610,7 +610,7 @@ cdef class JazelleFile:
                 print(f"  Track 1 charge: {track.charge}")
     """
     # This class owns the C++ object via unique_ptr
-    cdef unique_ptr[pxd.JazelleFile] cpp_obj
+    cdef unique_ptr[pxd.CppJazelleFile] cpp_obj  # Changed from JazelleFile
     
     def __cinit__(self, filepath):
         """
@@ -621,7 +621,7 @@ cdef class JazelleFile:
         """
         cdef string s_filepath = filepath.encode('UTF-8')
         try:
-            self.cpp_obj.reset(new pxd.JazelleFile(s_filepath))
+            self.cpp_obj.reset(new pxd.CppJazelleFile(s_filepath))  # Changed
         except Exception as e:
             raise RuntimeError(f"Error opening Jazelle file: {e}")
             

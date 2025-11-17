@@ -134,8 +134,8 @@ cdef extern from "jazelle/banks/PHKELID.hpp" namespace "jazelle":
 # --- Main Event Container ---
 
 cdef extern from "jazelle/JazelleEvent.hpp" namespace "jazelle":
-    cdef cppclass JazelleEvent:
-        JazelleEvent() except +
+    cdef cppclass CppJazelleEvent "jazelle::JazelleEvent":
+        CppJazelleEvent() except +
         void clear()
         IEVENTH ieventh
 
@@ -153,10 +153,10 @@ cdef extern from "jazelle/JazelleEvent.hpp" namespace "jazelle":
 # --- Main File Reader ---
 
 cdef extern from "jazelle/JazelleFile.hpp" namespace "jazelle":
-    cdef cppclass JazelleFile:
-        JazelleFile(string& filepath) except +
-        bint nextRecord(JazelleEvent& event) except +
-        bint readEvent(int32_t index, JazelleEvent& event) except +
+    cdef cppclass CppJazelleFile "jazelle::JazelleFile":  # Note the quoted name
+        CppJazelleFile(string& filepath) except +
+        bint nextRecord(CppJazelleEvent& event) except +
+        bint readEvent(int32_t index, CppJazelleEvent& event) except +
         int32_t getTotalEvents() except +
         string getFileName()
         system_clock.time_point getCreationDate()
