@@ -25,6 +25,6 @@ classifiers = [
 requires-python = ">=3.8"
 
 # Tell scikit-build-core where the Python package lives
-[tool.scikit-build]
+[tool.scikit-build.cython]
 cmake.source-dir = "."
 wheel.packages = ["src/jazelle"]
