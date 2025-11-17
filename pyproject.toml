@@ -1,7 +1,9 @@
+# pyproject.toml
+
 [build-system]
 requires = [
-    "scikit-build-core>=0.7",
-    "cython>=3.0"
+    "scikit-build-core>=0.7",  # The build system
+    "cython>=3.0"              # Cython build dependency
 ]
 build-backend = "scikit_build_core.build"
 
@@ -13,7 +15,7 @@ readme = "README.md"
 authors = [
     { name = "Alkaid Cheng", email = "alkaid.ccheng@gmail.com" },
 ]
-license = { file = "LICENSE" }
+license = { file = "LICENSE" } # Add a LICENSE file
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: C++",
@@ -22,11 +24,15 @@ classifiers = [
 ]
 requires-python = ">=3.8"
 
+# Tell scikit-build-core where the Python package lives
 [tool.scikit-build]
 cmake.source-dir = "."
 wheel.packages = ["src/jazelle"]
-# Enable Cython support
-experimental = true
 
+# Configure Cython compilation
 [tool.scikit-build.cmake.define]
-# Any CMake defines you need
+# Any CMake defines you might need can go here
+
+# Tell scikit-build-core to cythonize .pyx files
+[tool.cibuildwheel]
+build-verbosity = 1
