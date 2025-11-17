@@ -65,11 +65,3 @@ target_include_directories(_core PRIVATE
 install(TARGETS _core
         LIBRARY DESTINATION jazelle
         RUNTIME DESTINATION jazelle)
-
-# ------------------------------------------------------------------
-#  5. Install the C++ headers (Optional, but good practice)
-# ------------------------------------------------------------------
-install(
-    DIRECTORY include/jazelle
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
