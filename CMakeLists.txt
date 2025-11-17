@@ -28,6 +28,8 @@ add_library(jazelle_reader_core STATIC
 )
 target_include_directories(jazelle_reader_core PUBLIC include src)
 
+find_package(Cython REQUIRED)
+
 # ------------------------------------------------------------------
 #  3. Build the Cython Extension
 # ------------------------------------------------------------------
