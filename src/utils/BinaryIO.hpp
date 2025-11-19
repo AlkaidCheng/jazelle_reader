@@ -79,15 +79,17 @@ namespace utils
     {
         if (fbits == 0) return 0.0f;
 
-        // This is a direct, literal translation of the bit logic
-        // from the original DataBuffer.java.
         int32_t sign     = fbits & 0x8000;
         int32_t exp      = fbits & 0x7f80;
         exp -= 256; // 2 << 7
+        
         int32_t mantissa_hi = (fbits & 0x7f) << 16;
-        // Java '>>' is arithmetic, so we cast to signed first.
-        int32_t mantissa_lo = (fbits & 0xffff0000) >> 16; 
-        int32_t mantissa = mantissa_hi + mantissa_lo; // Java used '+'
+        
+        // Cast to uint32_t to ensure logical shift (filling with zeros)
+        // before casting back to int32_t.
+        int32_t mantissa_lo = (static_cast<uint32_t>(fbits) & 0xffff0000) >> 16;
+        
+        int32_t mantissa = mantissa_hi + mantissa_lo;
         
         int32_t bits = (sign << 16) | (exp << 16) | mantissa;
         
