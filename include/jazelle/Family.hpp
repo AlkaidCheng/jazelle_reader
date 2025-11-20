@@ -44,6 +44,19 @@ namespace jazelle
             return nullptr;
         }
 
+        /**
+         * @brief Access a bank by its zero-based index in the storage vector.
+         * @param index The index [0, count()).
+         * @return Pointer to the bank, or nullptr if index is out of bounds.
+         */
+        T* at(size_t index)
+        {
+            if (index < m_banks.size()) {
+                return &m_banks[index];
+            }
+            return nullptr;
+        }
+
         void clear() { m_banks.clear(); } // Keeps capacity, avoids reallocation next event
         size_t count() const { return m_banks.size(); }
 
