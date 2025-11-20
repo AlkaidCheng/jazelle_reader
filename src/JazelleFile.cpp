@@ -200,8 +200,8 @@ namespace jazelle
                 offset += phkelid->read(dataBufferView, offset, event);
             }
             // Resolve MCPART parent pointers
-            size_t mcpartCount = event.mcpartFamily.count();
-            for (size_t i = 0; i < mcpartCount; ++i)
+            size_t mcpartSize = event.mcpartFamily.size();
+            for (size_t i = 0; i < mcpartSize; ++i)
             {
                 MCPART* part = event.mcpartFamily.at(i);
                 
