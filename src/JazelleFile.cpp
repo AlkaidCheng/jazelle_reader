@@ -139,6 +139,7 @@ namespace jazelle
             offset += mchead->read(dataBufferView, offset, event);
             
             // Read MCPart
+            event.mcpartFamily.reserve(toc.m_nMcPart);
             for (int32_t i = 0; i < toc.m_nMcPart; i++)
             {
                 int32_t id = dataBufferView.readInt(offset);
@@ -147,6 +148,7 @@ namespace jazelle
                 offset += mcpart->read(dataBufferView, offset, event);
             }
             // Read PHPSUM
+            event.phpsumFamily.reserve(toc.m_nPhPSum);
             for (int32_t i = 0; i < toc.m_nPhPSum; i++)
             {
                 int32_t id = dataBufferView.readInt(offset);
@@ -155,6 +157,7 @@ namespace jazelle
                 offset += phpsum->read(dataBufferView, offset, event);
             }
             // Read PHCHRG
+            event.phchrgFamily.reserve(toc.m_nPhChrg);
             for (int32_t i = 0; i < toc.m_nPhChrg; i++)
             {
                 int32_t id = dataBufferView.readInt(offset);
@@ -163,6 +166,7 @@ namespace jazelle
                 offset += phchrg->read(dataBufferView, offset, event);
             }
             // Read PHKLUS
+            event.phklusFamily.reserve(toc.m_nPhKlus);
             for (int32_t i = 0; i < toc.m_nPhKlus; i++)
             {
                 int32_t id = dataBufferView.readInt(offset);
@@ -171,6 +175,7 @@ namespace jazelle
                 offset += phklus->read(dataBufferView, offset, event);
             }
             // Read PHWIC
+            event.phwicFamily.reserve(toc.m_nPhWic);
             for (int32_t i = 0; i < toc.m_nPhWic; i++)
             {
                 int32_t id = dataBufferView.readInt(offset);
@@ -179,6 +184,7 @@ namespace jazelle
                 offset += phwic->read(dataBufferView, offset, event);
             }
             // Read PHCRID
+            event.phcridFamily.reserve(toc.m_nPhCrid);
             for (int32_t i = 0; i < toc.m_nPhCrid; i++)
             {
                 int32_t id = dataBufferView.readInt(offset) & 0xffff;
@@ -186,6 +192,7 @@ namespace jazelle
                 offset += phcrid->read(dataBufferView, offset, event);
             }
             // Read PHKTRK
+            event.phktrkFamily.reserve(toc.m_nPhKTrk);
             for (int32_t i = 0; i < toc.m_nPhKTrk; i++)
             {
                 int32_t id = dataBufferView.readInt(offset) & 0xffff;
@@ -193,6 +200,7 @@ namespace jazelle
                 offset += phktrk->read(dataBufferView, offset, event);
             }
             // Read PHKELID
+            event.phkelidFamily.reserve(toc.m_nPhKElId);
             for (int32_t i = 0; i < toc.m_nPhKElId; i++)
             {
                 int32_t id = dataBufferView.readInt(offset) & 0xffff;
