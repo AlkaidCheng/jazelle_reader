@@ -47,7 +47,7 @@ namespace jazelle
         /**
          * @brief Access a bank by its zero-based index in the storage vector.
          * @param index The index [0, count()).
-         * @return Pointer to the bank, or nullptr if index is out of bounds.
+         * @return Pointer to the bank, or nullptr if index >= count().
          */
         T* at(size_t index)
         {
