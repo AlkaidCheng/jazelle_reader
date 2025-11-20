@@ -24,11 +24,15 @@ cdef object cpp_to_py_time(system_clock.time_point tp):
     except:
         return None
 
+# 1. Forward declare the Event class
+cdef class JazelleEvent
+
 #
 # --- Helper: Bank Wrapper Base Class ---
 #
 cdef class PyBank:
     cdef pxd.Bank* _ptr
+    cdef JazelleEvent _event_ref
     def __repr__(self):
         return f"<{self.__class__.__name__} id={self.id}>"
     
@@ -36,11 +40,21 @@ cdef class PyBank:
     def id(self):
         return self._ptr.getId()
 
+cdef object wrap_bank(pxd.Bank* ptr, JazelleEvent event, type py_class):
+    if ptr == NULL:
+        return None
+    # Instantiate the specific Python class
+    cdef PyBank obj = py_class.__new__(py_class)
+    obj._ptr = ptr
+    obj._event_ref = event
+    return obj
+
 #
 # --- Helper: Struct Wrappers (for PIDVEC, CRIDHYP) ---
 #
 cdef class PyPIDVEC:
     cdef pxd.PIDVEC* _ptr
+    cdef JazelleEvent _event_ref
     def __init__(self):
         raise TypeError("Cannot instantiate PyPIDVEC directly.")
     def __repr__(self):
@@ -60,6 +74,7 @@ cdef class PyPIDVEC:
 
 cdef class PyCRIDHYP:
     cdef pxd.CRIDHYP* _ptr
+    cdef JazelleEvent _event_ref
     def __init__(self):
         raise TypeError("Cannot instantiate PyCRIDHYP directly.")
         
@@ -84,19 +99,21 @@ cdef class PyCRIDHYP:
     def llik(self):
         if not self._ptr.llik.has_value():
             return None
-        return wrap_pidvec(cython.address(self._ptr.llik.value()))
+        return wrap_pidvec(cython.address(self._ptr.llik.value()), self._event_ref)
 
 #
 # --- Bank Wrapper Factory Functions ---
 #
-cdef object wrap_pidvec(pxd.PIDVEC* ptr):
+cdef object wrap_pidvec(pxd.PIDVEC* ptr, JazelleEvent event):
     cdef PyPIDVEC py_obj = <PyPIDVEC>PyPIDVEC.__new__(PyPIDVEC)
     py_obj._ptr = ptr
+    py_obj._event_ref = event
     return py_obj
 
-cdef object wrap_cridhyp(pxd.CRIDHYP* ptr):
+cdef object wrap_cridhyp(pxd.CRIDHYP* ptr, JazelleEvent event):
     cdef PyCRIDHYP py_obj = <PyCRIDHYP>PyCRIDHYP.__new__(PyCRIDHYP)
     py_obj._ptr = ptr
+    py_obj._event_ref = event
     return py_obj
 
 #
@@ -122,10 +139,6 @@ cdef class PyIEVENTH(PyBank):
     def evttime(self):
         return cpp_to_py_time((<pxd.IEVENTH*>self._ptr).evttime)
 
-cdef object wrap_ieventh(pxd.IEVENTH* ptr):
-    cdef PyIEVENTH py_obj = <PyIEVENTH>PyIEVENTH.__new__(PyIEVENTH)
-    py_obj._ptr = ptr
-    return py_obj
 
 # --- MCHEAD ---
 cdef class PyMCHEAD(PyBank):
@@ -142,11 +155,6 @@ cdef class PyMCHEAD(PyBank):
     def ipy(self): return (<pxd.MCHEAD*>self._ptr).ipy
     @property
     def ipz(self): return (<pxd.MCHEAD*>self._ptr).ipz
-
-cdef object wrap_mchead(pxd.MCHEAD* ptr):
-    cdef PyMCHEAD py_obj = <PyMCHEAD>PyMCHEAD.__new__(PyMCHEAD)
-    py_obj._ptr = ptr
-    return py_obj
 
 # --- MCPART ---
 cdef class PyMCPART(PyBank):
@@ -174,11 +182,6 @@ cdef class PyMCPART(PyBank):
         cdef pxd.MCPART* p_obj = <pxd.MCPART*>self._ptr
         return [p_obj.xt[i] for i in range(3)]
 
-cdef object wrap_mcpart(pxd.MCPART* ptr):
-    cdef PyMCPART py_obj = <PyMCPART>PyMCPART.__new__(PyMCPART)
-    py_obj._ptr = ptr
-    return py_obj
-
 # --- PHPSUM ---
 cdef class PyPHPSUM(PyBank):
     def __init__(self):
@@ -204,10 +207,6 @@ cdef class PyPHPSUM(PyBank):
     def getPTot(self):
         return (<pxd.PHPSUM*>self._ptr).getPTot()
 
-cdef object wrap_phpsum(pxd.PHPSUM* ptr):
-    cdef PyPHPSUM py_obj = <PyPHPSUM>PyPHPSUM.__new__(PyPHPSUM)
-    py_obj._ptr = ptr
-    return py_obj
 
 # --- PHCHRG ---
 cdef class PyPHCHRG(PyBank):
@@ -279,12 +278,7 @@ cdef class PyPHCHRG(PyBank):
     def dtkpar(self):
         cdef pxd.PHCHRG* p_obj = <pxd.PHCHRG*>self._ptr
         return [p_obj.dtkpar[i] for i in range(15)]
-
-cdef object wrap_phchrg(pxd.PHCHRG* ptr):
-    cdef PyPHCHRG py_obj = <PyPHCHRG>PyPHCHRG.__new__(PyPHCHRG)
-    py_obj._ptr = ptr
-    return py_obj
-
+    
 # --- PHKLUS ---
 cdef class PyPHKLUS(PyBank):
     def __init__(self):
@@ -327,12 +321,7 @@ cdef class PyPHKLUS(PyBank):
     def elayer(self):
         cdef pxd.PHKLUS* p_obj = <pxd.PHKLUS*>self._ptr
         return [p_obj.elayer[i] for i in range(8)]
-
-cdef object wrap_phklus(pxd.PHKLUS* ptr):
-    cdef PyPHKLUS py_obj = <PyPHKLUS>PyPHKLUS.__new__(PyPHKLUS)
-    py_obj._ptr = ptr
-    return py_obj
-
+    
 # --- PHWIC ---
 cdef class PyPHWIC(PyBank):
     def __init__(self):
@@ -400,11 +389,6 @@ cdef class PyPHWIC(PyBank):
         cdef pxd.PHWIC* p_obj = <pxd.PHWIC*>self._ptr
         return [p_obj.dpfit[i] for i in range(10)]
 
-cdef object wrap_phwic(pxd.PHWIC* ptr):
-    cdef PyPHWIC py_obj = <PyPHWIC>PyPHWIC.__new__(PyPHWIC)
-    py_obj._ptr = ptr
-    return py_obj
-
 # --- PHCRID ---
 cdef class PyPHCRID(PyBank):
     def __init__(self):
@@ -425,29 +409,21 @@ cdef class PyPHCRID(PyBank):
         
     @property
     def liq(self):
-        return wrap_cridhyp(cython.address((<pxd.PHCRID*>self._ptr).liq))
+        return wrap_cridhyp(cython.address((<pxd.PHCRID*>self._ptr).liq), self._event_ref)
+    
     @property
     def gas(self):
-        return wrap_cridhyp(cython.address((<pxd.PHCRID*>self._ptr).gas))
+        return wrap_cridhyp(cython.address((<pxd.PHCRID*>self._ptr).gas), self._event_ref)
+    
     @property
     def llik(self):
-        return wrap_pidvec(cython.address((<pxd.PHCRID*>self._ptr).llik))
-
-cdef object wrap_phcrid(pxd.PHCRID* ptr):
-    cdef PyPHCRID py_obj = <PyPHCRID>PyPHCRID.__new__(PyPHCRID)
-    py_obj._ptr = ptr
-    return py_obj
+        return wrap_pidvec(cython.address((<pxd.PHCRID*>self._ptr).llik), self._event_ref)
 
 # --- PHKTRK ---
 cdef class PyPHKTRK(PyBank):
     def __init__(self):
         raise TypeError("Cannot instantiate PyPHKTRK directly.")
     # This is a stub bank, no properties
-
-cdef object wrap_phktrk(pxd.PHKTRK* ptr):
-    cdef PyPHKTRK py_obj = <PyPHKTRK>PyPHKTRK.__new__(PyPHKTRK)
-    py_obj._ptr = ptr
-    return py_obj
 
 # --- PHKELID ---
 cdef class PyPHKELID(PyBank):
@@ -459,7 +435,7 @@ cdef class PyPHKELID(PyBank):
         cdef pxd.PHCHRG* p = (<pxd.PHKELID*>self._ptr).phchrg
         if p == NULL:
             return None
-        return wrap_phchrg(p)
+        return wrap_bank(<pxd.Bank*>p, self._event_ref, PyPHCHRG)
     
     @property
     def idstat(self): return (<pxd.PHKELID*>self._ptr).idstat
@@ -510,12 +486,6 @@ cdef class PyPHKELID(PyBank):
     @property
     def em3x3b(self): return (<pxd.PHKELID*>self._ptr).em3x3b
 
-cdef object wrap_phkelid(pxd.PHKELID* ptr):
-    cdef PyPHKELID py_obj = <PyPHKELID>PyPHKELID.__new__(PyPHKELID)
-    py_obj._ptr = ptr
-    return py_obj
-
-
 #
 # --- Event Container Wrapper ---
 #
@@ -541,54 +511,36 @@ cdef class JazelleEvent:
     @property
     def ieventh(self):
         """The IEVENTH (event header) bank."""
-        return wrap_ieventh(cython.address(self.cpp_event.ieventh))
+        return wrap_bank(cython.address(self.cpp_event.ieventh), self, PyIEVENTH)
 
     # --- Convenience Finders ---
     
     def findMCHEAD(self, int id):
-        cdef pxd.MCHEAD* p = self.cpp_event.findMCHEAD(id)
-        if p == NULL: return None
-        return wrap_mchead(p)
+        return wrap_bank(self.cpp_event.findMCHEAD(id), self, PyMCHEAD)
 
     def findMCPART(self, int id):
-        cdef pxd.MCPART* p = self.cpp_event.findMCPART(id)
-        if p == NULL: return None
-        return wrap_mcpart(p)
+        return wrap_bank(self.cpp_event.findMCPART(id), self, PyMCPART)
 
     def findPHPSUM(self, int id):
-        cdef pxd.PHPSUM* p = self.cpp_event.findPHPSUM(id)
-        if p == NULL: return None
-        return wrap_phpsum(p)
+        return wrap_bank(self.cpp_event.findPHPSUM(id), self, PyPHPSUM)
 
     def findPHCHRG(self, int id):
-        cdef pxd.PHCHRG* p = self.cpp_event.findPHCHRG(id)
-        if p == NULL: return None
-        return wrap_phchrg(p)
+        return wrap_bank(self.cpp_event.findPHCHRG(id), self, PyPHCHRG)
 
     def findPHKLUS(self, int id):
-        cdef pxd.PHKLUS* p = self.cpp_event.findPHKLUS(id)
-        if p == NULL: return None
-        return wrap_phklus(p)
+        return wrap_bank(self.cpp_event.findPHKLUS(id), self, PyPHKLUS)
 
     def findPHWIC(self, int id):
-        cdef pxd.PHWIC* p = self.cpp_event.findPHWIC(id)
-        if p == NULL: return None
-        return wrap_phwic(p)
+        return wrap_bank(self.cpp_event.findPHWIC(id), self, PyPHWIC)
 
     def findPHCRID(self, int id):
-        cdef pxd.PHCRID* p = self.cpp_event.findPHCRID(id)
-        if p == NULL: return None
-        return wrap_phcrid(p)
+        return wrap_bank(self.cpp_event.findPHCRID(id), self, PyPHCRID)
 
     def findPHKTRK(self, int id):
-        cdef pxd.PHKTRK* p = self.cpp_event.findPHKTRK(id)
-        if p == NULL: return None
-        return wrap_phktrk(p)
+        return wrap_bank(self.cpp_event.findPHKTRK(id), self, PyPHKTRK)
 
     def findPHKELID(self, int id):
-        cdef pxd.PHKELID* p = self.cpp_event.findPHKELID(id)
-        if p == NULL: return None
-        return wrap_phkelid(p)
+        return wrap_bank(self.cpp_event.findPHKELID(id), self, PyPHKELID)
 
 #
 # --- Main File Reader Wrapper ---
