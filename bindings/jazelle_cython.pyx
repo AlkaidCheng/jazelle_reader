@@ -99,7 +99,7 @@ cdef class PyCRIDHYP:
     def llik(self):
         if not self._ptr.llik.has_value():
             return None
-        return wrap_pidvec(cython.address(self._ptr.llik.value()))
+        return wrap_pidvec(cython.address(self._ptr.llik.value()), self._event_ref)
 
 #
 # --- Bank Wrapper Factory Functions ---
@@ -409,13 +409,15 @@ cdef class PyPHCRID(PyBank):
         
     @property
     def liq(self):
-        return wrap_cridhyp(cython.address((<pxd.PHCRID*>self._ptr).liq))
+        return wrap_cridhyp(cython.address((<pxd.PHCRID*>self._ptr).liq), self._event_ref)
+    
     @property
     def gas(self):
-        return wrap_cridhyp(cython.address((<pxd.PHCRID*>self._ptr).gas))
+        return wrap_cridhyp(cython.address((<pxd.PHCRID*>self._ptr).gas), self._event_ref)
+    
     @property
     def llik(self):
-        return wrap_pidvec(cython.address((<pxd.PHCRID*>self._ptr).llik))
+        return wrap_pidvec(cython.address((<pxd.PHCRID*>self._ptr).llik), self._event_ref)
 
 # --- PHKTRK ---
 cdef class PyPHKTRK(PyBank):
