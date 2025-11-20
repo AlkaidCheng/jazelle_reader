@@ -9,6 +9,19 @@ from libcpp.optional cimport optional
 from libc.stdint cimport int16_t, int32_t, int64_t
 from libcpp.chrono cimport system_clock, time_point
 
+cdef extern from "jazelle/Family.hpp" namespace "jazelle":
+    
+    cdef cppclass IFamily:
+        size_t count()
+        Bank* at(size_t index)
+        Bank* find(int32_t id)
+
+    cdef cppclass Family[T](IFamily):
+        T* at(size_t index)
+        T* find(int32_t id)
+        T* add(int32_t id)
+        void clear()
+
 # --- Utility Structs (from banks/*.hpp) ---
 
 cdef extern from "jazelle/banks/PIDVEC.hpp" namespace "jazelle":

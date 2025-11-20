@@ -24,6 +24,44 @@ cdef object cpp_to_py_time(system_clock.time_point tp):
     except:
         return None
 
+cdef class PyFamily:
+    cdef pxd.IFamily* _ptr        # Generic Interface
+    cdef JazelleEvent _event_ref  # Lifecycle management
+    cdef type _wrapper_class      # Target Python class
+
+    def __init__(self):
+        raise TypeError("Cannot instantiate PyFamily directly.")
+
+    def __len__(self):
+        return self._ptr.count()
+
+    def __getitem__(self, int index):
+        if index < 0:
+            index += len(self)
+            
+        # Clean call: at() returns Bank*, generic wrap_bank handles it
+        cdef pxd.Bank* raw_ptr = self._ptr.at(index)
+        
+        if raw_ptr == NULL:
+            raise IndexError("Family index out of range")
+            
+        return wrap_bank(raw_ptr, self._event_ref, self._wrapper_class)
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
+
+    def find(self, int id):
+        cdef pxd.Bank* raw_ptr = self._ptr.find(id)
+        return wrap_bank(raw_ptr, self._event_ref, self._wrapper_class)
+
+cdef object wrap_family(pxd.IFamily* ptr, JazelleEvent event, type py_class):
+    cdef PyFamily obj = PyFamily.__new__(PyFamily)
+    obj._ptr = ptr
+    obj._event_ref = event
+    obj._wrapper_class = py_class
+    return obj
+
 # 1. Forward declare the Event class
 cdef class JazelleEvent
 
@@ -541,6 +579,42 @@ cdef class JazelleEvent:
 
     def findPHKELID(self, int id):
         return wrap_bank(self.cpp_event.findPHKELID(id), self, PyPHKELID)
+
+    @property
+    def mchead(self):
+        return wrap_family(<pxd.IFamily*>&self.cpp_event.mcheadFamily, self, PyMCHEAD)
+
+    @property
+    def mcpart(self):
+        return wrap_family(<pxd.IFamily*>&self.cpp_event.mcpartFamily, self, PyMCPART)
+
+    @property
+    def phpsum(self):
+        return wrap_family(<pxd.IFamily*>&self.cpp_event.phpsumFamily, self, PyPHPSUM)
+
+    @property
+    def phchrg(self):
+        return wrap_family(<pxd.IFamily*>&self.cpp_event.phchrgFamily, self, PyPHCHRG)
+
+    @property
+    def phklus(self):
+        return wrap_family(<pxd.IFamily*>&self.cpp_event.phklusFamily, self, PyPHKLUS)
+
+    @property
+    def phwic(self):
+        return wrap_family(<pxd.IFamily*>&self.cpp_event.phwicFamily, self, PyPHWIC)
+
+    @property
+    def phcrid(self):
+        return wrap_family(<pxd.IFamily*>&self.cpp_event.phcridFamily, self, PyPHCRID)
+
+    @property
+    def phktrk(self):
+        return wrap_family(<pxd.IFamily*>&self.cpp_event.phktrkFamily, self, PyPHKTRK)
+
+    @property
+    def phkelid(self):
+        return wrap_family(<pxd.IFamily*>&self.cpp_event.phkelidFamily, self, PyPHKELID)
 
 #
 # --- Main File Reader Wrapper ---

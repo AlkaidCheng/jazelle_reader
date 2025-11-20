@@ -44,7 +44,6 @@ namespace jazelle
         Family<PHCRID>   phcridFamily;
         Family<PHKTRK>   phktrkFamily;
         Family<PHKELID>  phkelidFamily;
-        // ... Add other families as needed ...
 
         /**
          * @brief Default constructor.
