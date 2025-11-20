@@ -14,7 +14,7 @@ find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 # ------------------------------------------------------------------
 #  Cythonize the .pyx file
 # ------------------------------------------------------------------
-set(CYTHON_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/jazelle/jazelle_cython.pyx)
+set(CYTHON_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/bindings/jazelle_cython.pyx)
 set(CYTHON_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/jazelle_cython.cpp)
 
 # Use Python to run Cython
@@ -23,7 +23,8 @@ add_custom_command(
     COMMAND ${Python_EXECUTABLE} -m cython 
             --cplus 
             -3
-            -I ${CMAKE_CURRENT_SOURCE_DIR}/src/jazelle
+            -I ${CMAKE_CURRENT_SOURCE_DIR}/include  # Point to C++ headers
+            -I ${CMAKE_CURRENT_SOURCE_DIR}/bindings # Point to .pxd files
             ${CYTHON_SOURCE}
             -o ${CYTHON_OUTPUT}
     DEPENDS ${CYTHON_SOURCE}
@@ -76,7 +77,7 @@ target_link_libraries(jazelle_cython PRIVATE
 
 # Tell CMake where to find your .pxd and .hpp files
 target_include_directories(jazelle_cython PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/jazelle
+    ${CMAKE_CURRENT_SOURCE_DIR}/bindings
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${Python_INCLUDE_DIRS}
