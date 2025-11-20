@@ -36,10 +36,7 @@ namespace jazelle
         std::array<float, 3> xt;
         
         int32_t parent_id; ///< "Key giving parent particle" (ID of another MCPART)
-        
-        // Note: The template file shows a PARENT-->MCPART key.
-        // We store the ID here and can add a resolved MCPART* pointer
-        // similar to PHKELID if needed later.
+        MCPART* parent = nullptr;
 
         /**
          * @brief Constructor.

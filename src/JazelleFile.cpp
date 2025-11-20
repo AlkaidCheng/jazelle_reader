@@ -199,6 +199,22 @@ namespace jazelle
                 Bank* phkelid = event.add("PHKELID", id);
                 offset += phkelid->read(dataBufferView, offset, event);
             }
+            // Resolve MCPART parent pointers
+            size_t mcpartCount = event.mcpartFamily.count();
+            for (size_t i = 0; i < mcpartCount; ++i)
+            {
+                MCPART* part = event.mcpartFamily.at(i);
+                
+                if (part && part->parent_id > 0)
+                {
+                    // Look up the parent by ID using the event's finder
+                    part->parent = event.findMCPART(part->parent_id);
+                }
+                else if (part)
+                {
+                    part->parent = nullptr;
+                }
+            }
         }
     };
 
