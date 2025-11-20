@@ -210,6 +210,10 @@ namespace jazelle
                     // Look up the parent by ID using the event's finder
                     part->parent = event.findMCPART(part->parent_id);
                 }
+                else if (part)
+                {
+                    part->parent = nullptr;
+                }
             }
         }
     };
