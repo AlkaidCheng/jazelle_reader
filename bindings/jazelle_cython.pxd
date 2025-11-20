@@ -12,7 +12,7 @@ from libcpp.chrono cimport system_clock, time_point
 cdef extern from "jazelle/Family.hpp" namespace "jazelle":
     
     cdef cppclass IFamily:
-        size_t count()
+        size_t size()
         Bank* at(size_t index)
         Bank* find(int32_t id)
 

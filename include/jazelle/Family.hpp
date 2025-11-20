@@ -16,7 +16,7 @@ namespace jazelle
         // Clean names!
         virtual Bank* at(size_t index) = 0;
         virtual Bank* find(int32_t id) = 0;
-        virtual size_t count() const = 0;
+        virtual size_t size() const = 0;
     };
 
     template <typename T>
@@ -28,7 +28,7 @@ namespace jazelle
 
         /**
          * @brief Access a bank by its zero-based index in the storage vector.
-         * @param index The index [0, count()).
+         * @param index The index [0, size()).
          * @return Pointer to the bank, or nullptr if index is out of bounds.
          */
         T* at(size_t index) override {
@@ -48,7 +48,7 @@ namespace jazelle
             return nullptr;
         }
 
-        size_t count() const override {
+        size_t size() const override {
             return m_banks.size();
         }
 

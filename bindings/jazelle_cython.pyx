@@ -33,7 +33,7 @@ cdef class PyFamily:
         raise TypeError("Cannot instantiate PyFamily directly.")
 
     def __len__(self):
-        return self._ptr.count()
+        return self._ptr.size()
 
     def __getitem__(self, int index):
         if index < 0:
@@ -50,6 +50,10 @@ cdef class PyFamily:
     def __iter__(self):
         for i in range(len(self)):
             yield self[i]
+
+    @property
+    def size(self):
+        return self._ptr.size()
 
     def find(self, int id):
         cdef pxd.Bank* raw_ptr = self._ptr.find(id)
