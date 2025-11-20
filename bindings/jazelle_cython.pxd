@@ -152,6 +152,16 @@ cdef extern from "jazelle/JazelleEvent.hpp" namespace "jazelle":
         void clear()
         IEVENTH ieventh
 
+        Family[MCHEAD]  mcheadFamily
+        Family[MCPART]  mcpartFamily
+        Family[PHPSUM]  phpsumFamily
+        Family[PHCHRG]  phchrgFamily
+        Family[PHKLUS]  phklusFamily
+        Family[PHWIC]   phwicFamily
+        Family[PHCRID]  phcridFamily
+        Family[PHKTRK]  phktrkFamily
+        Family[PHKELID] phkelidFamily        
+
         # Convenience finders
         MCHEAD* findMCHEAD(int32_t id)
         MCPART* findMCPART(int32_t id)
