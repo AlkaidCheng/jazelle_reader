@@ -435,7 +435,7 @@ cdef class PyPHKELID(PyBank):
         cdef pxd.PHCHRG* p = (<pxd.PHKELID*>self._ptr).phchrg
         if p == NULL:
             return None
-        return wrap_phchrg(p)
+        return wrap_bank(<pxd.Bank*>p, self._event_ref, PyPHCHRG)
     
     @property
     def idstat(self): return (<pxd.PHKELID*>self._ptr).idstat
