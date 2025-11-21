@@ -1189,6 +1189,7 @@ cdef class JazelleFile:
         Iterates through events sequentially.
         This is the most efficient way to read the file.
         """
+        self.rewind()  # Reset to start for consistent iteration
 
         cdef JazelleEvent event
         
