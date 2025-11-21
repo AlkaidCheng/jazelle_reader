@@ -1140,7 +1140,7 @@ cdef class JazelleFile:
         
         if self.cpp_obj.get().nextRecord(event.cpp_event):
             return event
-        return None            
+        return None
             
     def nextRecord(self, JazelleEvent event):
         """Reads the next logical record into the provided event object."""
