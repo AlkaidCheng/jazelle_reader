@@ -1,6 +1,7 @@
 # jazelle_reader/bindings/jazelle_cython.pyx
 # distutils: language = c++
-
+import sys
+import inspect
 import cython
 from libcpp.string cimport string
 from libcpp.memory cimport unique_ptr
@@ -11,6 +12,7 @@ from libc.stdint cimport int16_t, int32_t
 from libcpp.chrono cimport system_clock, to_time_t
 
 from libcpp.vector cimport vector
+from libcpp.utility cimport pair
 
 cimport jazelle_cython as pxd
 
@@ -23,18 +25,14 @@ cdef object cpp_to_py_time(system_clock.time_point tp):
     """
     cdef long time_t_val
     try:
-        if tp.time_since_epoch().count() == 0:
-            return None
         time_t_val = to_time_t(tp)
+        if time_t_val == 0:
+            return None
         return datetime.datetime.fromtimestamp(float(time_t_val))
     except:
         return None
 
 # --- Internal Wrapper Utilities ---
-
-# Forward declaration
-cdef class JazelleEvent:
-    pass
 
 cdef class Family:
     """
@@ -176,22 +174,6 @@ cdef class Bank:
 
     def __repr__(self):
         return f"<{self.__class__.__name__} id={self.id}>"
-
-    @classmethod
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        
-        name = cls.__name__
-        # Ignore the base class
-        if name != "Bank":
-            # Validate the class name against known bank names
-            known_banks = set(JazelleEvent.getKnownBankNames())
-            if name not in known_banks:
-                raise ValueError(
-                    f"Bank subclass name '{name}' is not a known bank name. "
-                    f"Known bank names: {sorted(known_banks)}"
-                )
-            _WRAPPER_MAP[name] = cls
     
     @property
     def id(self):
@@ -1083,20 +1065,18 @@ cdef class JazelleEvent:
         """
         if self._cached_families is not None:
             return self._cached_families
-
-        cdef vector[pair[string, pxd.CppIFamily*]] cpp_fams = self.cpp_event.getFamilies()
+    
+        cdef vector[pxd.CppIFamily*] cpp_fams = self.cpp_event.getFamilies()
         cdef size_t i
-        cdef string cpp_name
         cdef pxd.CppIFamily* ptr
         cdef str py_name
         
         temp_list = []
-
+    
         for i in range(cpp_fams.size()):
-            cpp_name = cpp_fams[i].first
-            ptr = cpp_fams[i].second
-            py_name = cpp_name.decode('utf-8')
-
+            ptr = cpp_fams[i]
+            py_name = ptr.name().decode('utf-8')
+    
             if py_name in _WRAPPER_MAP:
                 fam_obj = wrap_family(ptr, self, _WRAPPER_MAP[py_name])
                 temp_list.append(fam_obj)
@@ -1110,8 +1090,8 @@ cdef class JazelleEvent:
         """
         Returns the authoritative list of bank names defined in the C++ core.
         """
-        cdef vector[string] cpp_names = pxd.CppJazelleEvent.getKnownBankNames()
-        return [n.decode('utf-8') for n in cpp_names]    
+        cdef vector[string_view] cpp_names = pxd.getKnownBankNames()
+        return [n.decode('utf-8') for n in cpp_names]
 
 # --- JazelleFile Wrapper ---
 
@@ -1144,7 +1124,7 @@ cdef class JazelleFile:
     @property
     def fileName(self):
         """The internal filename from the Jazelle header."""
-        return self.cpp_obj.get().getFileName().decode('UTF-8')
+        return self.cpp_obj.get().getFileName()
 
     @property
     def creationDate(self):
@@ -1159,7 +1139,7 @@ cdef class JazelleFile:
     @property
     def lastRecordType(self):
         """The type of the last read record (e.g., 'MINIDST')."""
-        return self.cpp_obj.get().getLastRecordType().decode('UTF-8')
+        return self.cpp_obj.get().getLastRecordType()
 
     def __len__(self):
         return self.getTotalEvents()
@@ -1183,3 +1163,29 @@ cdef class JazelleFile:
             return event
         else:
             raise IndexError(f"Event index {index} out of range for file with {len(self)} events.")
+
+def _register_wrappers():
+    """
+    Introspects the module to find all Bank subclasses 
+    and registers them in _WRAPPER_MAP.
+    """
+    current_module = sys.modules[__name__]
+    for name, obj in inspect.getmembers(current_module):
+        if inspect.isclass(obj) and issubclass(obj, Bank) and obj is not Bank:
+            _WRAPPER_MAP[name] = obj
+
+#def register(cls):
+#    """Registers a Bank wrapper class in the global map."""
+#    name = cls.__name__
+#    # Ignore the base class
+#    if name != "Bank":
+#        # Validate the class name against known bank names
+#        known_banks = set(JazelleEvent.getKnownBankNames())
+#        if name not in known_banks:
+#            raise ValueError(
+#                f"Bank subclass name '{name}' is not a known bank name. "
+#                f"Known bank names: {sorted(known_banks)}"
+#            )
+#        _WRAPPER_MAP[name] = cls            
+# Execute immediately
+_register_wrappers()    

@@ -4,6 +4,7 @@
 # API that we want to access.
 
 from libcpp.string cimport string
+from libcpp.string_view cimport string_view
 from libcpp.memory cimport unique_ptr
 from libcpp.optional cimport optional
 from libc.stdint cimport int16_t, int32_t, int64_t
@@ -16,7 +17,7 @@ cdef extern from "jazelle/Family.hpp" namespace "jazelle":
     
     cdef cppclass CppIFamily "jazelle::IFamily":
         size_t size()
-        string name()
+        string_view name()
         CppBank* at(size_t index)
         CppBank* find(int32_t id)
 
@@ -152,19 +153,21 @@ cdef extern from "jazelle/banks/PHKELID.hpp" namespace "jazelle":
 
 cdef extern from "jazelle/JazelleEvent.hpp" namespace "jazelle":
     cdef cppclass CppJazelleEvent "jazelle::JazelleEvent":
+        
         CppJazelleEvent() except +
         void clear()
         CppIEVENTH ieventh
 
         CppFamily[T]& get[T]()      
 
-        vector[pair[string, CppIFamily*]] getFamilies()
-
         CppBank* add(string, int32_t) except +
 
         CppIFamily* getFamily(string) except +
 
-        static vector[string] getKnownBankNames()        
+        vector[CppIFamily*] getFamilies()
+
+cdef extern from "jazelle/JazelleEvent.hpp" namespace "jazelle::JazelleEvent":
+    vector[string_view] getKnownBankNames() except +
 
 # --- Main File Reader ---
 

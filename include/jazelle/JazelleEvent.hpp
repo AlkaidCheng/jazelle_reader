@@ -16,6 +16,7 @@
 
 namespace jazelle
 {
+
     /**
      * @class JazelleEvent
      * @brief Modernized event container using tuples to reduce boilerplate.
@@ -97,26 +98,23 @@ namespace jazelle
         }
 
         /**
-         * @brief Returns a list of (Name, IFamily*) for Python reflection.
+         * @brief Returns a list of IFamily* for Python reflection.
          */
-        std::vector<std::pair<std::string, IFamily*>> getFamilies()
+        std::vector<IFamily*> getFamilies()
         {
-            std::vector<std::pair<std::string, IFamily*>> result;
+            std::vector<IFamily*> result;
             result.reserve(std::tuple_size_v<decltype(m_families)>);
-
+        
             std::apply([&](auto&... families) {
-                (result.push_back({
-                    std::string(bank_name<typename std::decay_t<decltype(families)>::BankType>), 
-                    &families
-                }), ...);
+                (result.push_back(&families), ...);
             }, m_families);
-
+        
             return result;
         }
 
-        static std::vector<std::string> getKnownBankNames()
+        static std::vector<std::string_view> getKnownBankNames()
         {
-            std::vector<std::string> names;
+            std::vector<std::string_view> names;
             names.reserve(std::tuple_size_v<BankTypes>);
             
             // Iterate generic tuple types, not instances
