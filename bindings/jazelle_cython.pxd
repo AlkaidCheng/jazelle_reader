@@ -179,5 +179,6 @@ cdef extern from "jazelle/JazelleFile.hpp" namespace "jazelle":
         int32_t getTotalEvents() except +
         string getFileName()
         system_clock.time_point getCreationDate()
-        system_clock.time_point getModifiedDate()        
+        system_clock.time_point getModifiedDate()
         string getLastRecordType()
+        void rewind() except +

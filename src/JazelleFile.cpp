@@ -330,4 +330,9 @@ namespace jazelle
         return m_impl->lastRecordType;
     }
 
+    void JazelleFile::rewind()
+    {
+        m_impl->stream->rewind();
+    }
+
 } // namespace jazelle
