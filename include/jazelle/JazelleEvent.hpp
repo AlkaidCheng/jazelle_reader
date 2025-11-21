@@ -44,6 +44,8 @@ namespace jazelle
             std::apply([](auto&... families) {
                 (families.clear(), ...); 
             }, m_families);
+            // Note: ieventh is intentionally not cleared here,
+            // as it will be overwritten during the next read operation.
         }
 
         /**
