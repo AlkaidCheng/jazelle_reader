@@ -73,7 +73,7 @@ namespace jazelle
                 // Fold expression: Check every family
                 ((bank_name<typename std::decay_t<decltype(families)>::BankType> == name 
                   ? (result = families.add(id), true) // Found match: add and stop
-                  : false) || ...); 
+                  : (void) false) || ...); 
             }, m_families);
 
             if (result) return result;
@@ -88,7 +88,7 @@ namespace jazelle
                 // Check matching name
                 ((families.name() == name 
                     ? (result = &families, true) 
-                    : false) || ...); 
+                    : (void) false) || ...); 
             }, m_families);
             
             if (!result) {
