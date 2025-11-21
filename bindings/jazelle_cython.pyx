@@ -224,7 +224,7 @@ cdef class PIDVEC:
     cdef JazelleEvent _event_ref
     
     def __init__(self):
-        raise TypeError("Cannot instantiate PyPIDVEC directly.")
+        raise TypeError("Cannot instantiate PIDVEC directly.")
 
     def __repr__(self):
         return f"<PIDVEC e={self.e:.3f}, mu={self.mu:.3f}, pi={self.pi:.3f}, k={self.k:.3f}, p={self.p:.3f}>"
