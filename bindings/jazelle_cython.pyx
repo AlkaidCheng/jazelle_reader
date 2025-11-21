@@ -183,8 +183,15 @@ cdef class Bank:
         
         name = cls.__name__
         # Ignore the base class
-        if name != "Bank": 
-             _WRAPPER_MAP[name] = cls
+        if name != "Bank":
+            # Validate the class name against known bank names
+            known_banks = set(JazelleEvent.getKnownBankNames())
+            if name not in known_banks:
+                raise ValueError(
+                    f"Bank subclass name '{name}' is not a known bank name. "
+                    f"Known bank names: {sorted(known_banks)}"
+                )
+            _WRAPPER_MAP[name] = cls
     
     @property
     def id(self):
