@@ -43,7 +43,7 @@ cdef class Family:
     cdef type _wrapper_class
 
     def __init__(self):
-        raise TypeError("Cannot instantiate PyFamily directly.")
+        raise TypeError("Cannot instantiate Family directly.")
 
     def __len__(self):
         return self._ptr.size()
