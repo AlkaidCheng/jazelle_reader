@@ -68,6 +68,27 @@ namespace jazelle
             return utils::vaxToIeeeFloat(fbits);
         }
 
+        /**
+         * @brief Bulk read floats to encourage SIMD optimization.
+         */
+        void readFloats(int32_t offset, float* dest, size_t count) const
+        {
+            checkBounds(offset, count * 4);
+            const uint8_t* ptr = m_span.data() + offset;
+            
+            for (size_t i = 0; i < count; ++i) {
+                // Inlined manual readInt to avoid extra function calls
+                int32_t fbits = static_cast<int32_t>(
+                    static_cast<uint32_t>(ptr[0]) |
+                    (static_cast<uint32_t>(ptr[1]) << 8) |
+                    (static_cast<uint32_t>(ptr[2]) << 16) |
+                    (static_cast<uint32_t>(ptr[3]) << 24)
+                );
+                dest[i] = utils::vaxToIeeeFloat(fbits); // Compiler can now inline and vectorize this
+                ptr += 4;
+            }
+        }
+
     private:
         /**
          * @brief Checks if a read is within the buffer bounds.

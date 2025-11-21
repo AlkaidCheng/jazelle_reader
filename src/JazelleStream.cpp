@@ -206,9 +206,40 @@ int32_t JazelleStream::read()
 void JazelleStream::readFully(uint8_t* buffer, int32_t length)
 try
 {
-    for (int32_t i = 0; i < length; ++i)
+    int32_t totalRead = 0;
+
+    while (totalRead < length)
     {
-        buffer[i] = static_cast<uint8_t>(read());
+        // 1. Check for Physical Record Boundary
+        // If we have exhausted the current physical record, we must parse the next header.
+        if (m_nBytes >= m_reclen)
+        {
+            readLogicalHeader();
+            // readLogicalHeader resets m_nBytes (via readPhysicalHeader) 
+            // and increments it by the size of the logical headers read.
+        }
+
+        // 2. Calculate Chunk Size
+        // We can read whichever is smaller:
+        // - The remaining bytes requested by the user (length - totalRead)
+        // - The remaining bytes available in the current physical record (m_reclen - m_nBytes)
+        int32_t bytesInPhysical = m_reclen - m_nBytes;
+        int32_t bytesToRead = length - totalRead;
+        
+        int32_t chunkSize = std::min(bytesInPhysical, bytesToRead);
+
+        // 3. Block Read
+        if (chunkSize > 0)
+        {
+            m_fileStream.read(reinterpret_cast<char*>(buffer + totalRead), chunkSize);
+            
+            if (m_fileStream.fail()) {
+                throw JazelleEOF("unexpected EOF during block read");
+            }
+
+            m_nBytes += chunkSize;
+            totalRead += chunkSize;
+        }
     }
 }
 catch(const JazelleEOF& e)

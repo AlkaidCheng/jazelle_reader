@@ -17,10 +17,9 @@ namespace jazelle
         wcth   = buffer.readFloat(o); o += 4;
         phi    = buffer.readFloat(o); o += 4;
         wphi   = buffer.readFloat(o); o += 4;
-        
-        for (int i = 0; i < 8; ++i) {
-            elayer[i] = buffer.readFloat(o); o += 4;
-        }
+
+        buffer.readFloats(o, elayer.data(), 8);
+        o += 32;
         
         nhit2  = buffer.readInt(o);   o += 4;
         cth2   = buffer.readFloat(o); o += 4;

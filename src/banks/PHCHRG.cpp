@@ -11,14 +11,12 @@ namespace jazelle
     int32_t PHCHRG::read(const DataBuffer& buffer, int32_t offset, JazelleEvent& event)
     {
         int32_t o = offset;
-        
-        for (int i = 0; i < 6; ++i) {
-            hlxpar[i]  = buffer.readFloat(o); o += 4;
-        }
-        for (int i = 0; i < 15; ++i) {
-            dhlxpar[i] = buffer.readFloat(o); o += 4;
-        }
-        
+
+        buffer.readFloats(o, hlxpar.data(), 6);
+        o += 24;
+        buffer.readFloats(o, dhlxpar.data(), 15);
+        o += 60;
+
         bnorm   = buffer.readFloat(o); o += 4;
         impact  = buffer.readFloat(o); o += 4;
         b3norm  = buffer.readFloat(o); o += 4;
@@ -27,13 +25,11 @@ namespace jazelle
         smwstat = buffer.readShort(o); o += 2;
         status  = buffer.readInt(o);   o += 4;
         tkpar0  = buffer.readFloat(o); o += 4;
-        
-        for (int i = 0; i < 5; ++i)  {
-            tkpar[i]  = buffer.readFloat(o); o += 4;
-        }
-        for (int i = 0; i < 15; ++i) {
-            dtkpar[i] = buffer.readFloat(o); o += 4;
-        }
+
+        buffer.readFloats(o, tkpar.data(), 5);
+        o += 20;
+        buffer.readFloats(o, dtkpar.data(), 15);
+        o += 60;
         
         length  = buffer.readFloat(o); o += 4;
         chi2dt  = buffer.readFloat(o); o += 4;

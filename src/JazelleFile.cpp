@@ -128,21 +128,29 @@ namespace jazelle
         {
             int32_t offset = 0;
 
-            // --- OPTIMIZATION: Pre-allocate vectors using TOC counts ---
-            // This avoids reallocation as we push_back in the loops.
-            // Note: Assuming Family<T> has a reserve(size_t) method.
-            event.get<MCHEAD>().reserve(1); 
-            event.get<MCPART>().reserve(toc.m_nMcPart);
-            event.get<PHPSUM>().reserve(toc.m_nPhPSum);
-            event.get<PHCHRG>().reserve(toc.m_nPhChrg);
-            event.get<PHKLUS>().reserve(toc.m_nPhKlus);
-            event.get<PHWIC>().reserve(toc.m_nPhWic);
-            event.get<PHCRID>().reserve(toc.m_nPhCrid);
-            event.get<PHKTRK>().reserve(toc.m_nPhKTrk);
-            event.get<PHKELID>().reserve(toc.m_nPhKElId);
+            auto& mcHeadFam = event.get<MCHEAD>();
+            auto& mcPartFam = event.get<MCPART>();
+            auto& phSumFam  = event.get<PHPSUM>();
+            auto& phChrgFam = event.get<PHCHRG>();
+            auto& phKlusFam = event.get<PHKLUS>();
+            auto& phWicFam  = event.get<PHWIC>();
+            auto& phCridFam = event.get<PHCRID>();
+            auto& phKtrkFam = event.get<PHKTRK>();
+            auto& phKelidFam= event.get<PHKELID>();
 
-            // Read MCHead (ID 1, not read from stream)
-            Bank* mchead = event.add("MCHEAD", 1);
+            // Pre-allocate memory
+            mcHeadFam.reserve(1); 
+            mcPartFam.reserve(toc.m_nMcPart);
+            phSumFam.reserve(toc.m_nPhPSum);
+            phChrgFam.reserve(toc.m_nPhChrg);
+            phKlusFam.reserve(toc.m_nPhKlus);
+            phWicFam.reserve(toc.m_nPhWic);
+            phCridFam.reserve(toc.m_nPhCrid);
+            phKtrkFam.reserve(toc.m_nPhKTrk);
+            phKelidFam.reserve(toc.m_nPhKElId);
+
+            // Read MCHead (Direct add)
+            MCHEAD* mchead = mcHeadFam.add(1);
             offset += mchead->read(dataBufferView, offset, event);
             
             // Read MCPart
@@ -150,76 +158,79 @@ namespace jazelle
             {
                 int32_t id = dataBufferView.readInt(offset);
                 offset += 4;
-                Bank* mcpart = event.add("MCPART", id);
+                // Direct add to specific family
+                MCPART* mcpart = mcPartFam.add(id);
                 offset += mcpart->read(dataBufferView, offset, event);
             }
+
             // Read PHPSUM
             for (int32_t i = 0; i < toc.m_nPhPSum; i++)
             {
                 int32_t id = dataBufferView.readInt(offset);
                 offset += 4;
-                Bank* phpsum = event.add("PHPSUM", id);
+                PHPSUM* phpsum = phSumFam.add(id);
                 offset += phpsum->read(dataBufferView, offset, event);
             }
+
             // Read PHCHRG
             for (int32_t i = 0; i < toc.m_nPhChrg; i++)
             {
                 int32_t id = dataBufferView.readInt(offset);
                 offset += 4;
-                Bank* phchrg = event.add("PHCHRG", id);
+                PHCHRG* phchrg = phChrgFam.add(id);
                 offset += phchrg->read(dataBufferView, offset, event);
             }
+
             // Read PHKLUS
             for (int32_t i = 0; i < toc.m_nPhKlus; i++)
             {
                 int32_t id = dataBufferView.readInt(offset);
                 offset += 4;
-                Bank* phklus = event.add("PHKLUS", id);
+                PHKLUS* phklus = phKlusFam.add(id);
                 offset += phklus->read(dataBufferView, offset, event);
             }
+
             // Read PHWIC
             for (int32_t i = 0; i < toc.m_nPhWic; i++)
             {
                 int32_t id = dataBufferView.readInt(offset);
                 offset += 4;
-                Bank* phwic = event.add("PHWIC", id);
+                PHWIC* phwic = phWicFam.add(id);
                 offset += phwic->read(dataBufferView, offset, event);
             }
+
             // Read PHCRID
             for (int32_t i = 0; i < toc.m_nPhCrid; i++)
             {
                 int32_t id = dataBufferView.readInt(offset) & 0xffff;
-                Bank* phcrid = event.add("PHCRID", id);
+                PHCRID* phcrid = phCridFam.add(id);
                 offset += phcrid->read(dataBufferView, offset, event);
             }
+
             // Read PHKTRK
             for (int32_t i = 0; i < toc.m_nPhKTrk; i++)
             {
                 int32_t id = dataBufferView.readInt(offset) & 0xffff;
-                Bank* phktrk = event.add("PHKTRK", id);
+                PHKTRK* phktrk = phKtrkFam.add(id);
                 offset += phktrk->read(dataBufferView, offset, event);
             }
+
             // Read PHKELID
             for (int32_t i = 0; i < toc.m_nPhKElId; i++)
             {
                 int32_t id = dataBufferView.readInt(offset) & 0xffff;
-                Bank* phkelid = event.add("PHKELID", id);
+                PHKELID* phkelid = phKelidFam.add(id);
                 offset += phkelid->read(dataBufferView, offset, event);
             }
 
             // Resolve MCPART parent pointers
-            // UPDATE: Use the new template accessor to get the family
-            auto& mcpartFamily = event.get<MCPART>();
-            size_t mcpartSize = mcpartFamily.size();
-            
+            size_t mcpartSize = mcPartFam.size();
             for (size_t i = 0; i < mcpartSize; ++i)
             {
-                MCPART* part = mcpartFamily.at(i);
-                
+                MCPART* part = mcPartFam.at(i);
                 if (part && part->parent_id > 0)
                 {
-                    // UPDATE: Use the family's find method directly
-                    part->parent = mcpartFamily.find(part->parent_id);
+                    part->parent = mcPartFam.find(part->parent_id);
                 }
                 else if (part)
                 {
