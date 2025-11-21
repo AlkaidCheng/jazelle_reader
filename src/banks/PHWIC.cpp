@@ -30,17 +30,14 @@ namespace jazelle
         nhitshar = buffer.readShort(o); o += 2;
         nother   = buffer.readShort(o); o += 2;
         hitsused = buffer.readInt(o);   o += 4;
-        
-        for (int i = 0; i < 3; ++i)  {
-            pref1[i] = buffer.readFloat(o); o += 4;
-        }
-        for (int i = 0; i < 4; ++i)  {
-            pfit[i]  = buffer.readFloat(o); o += 4;
-        }
-        for (int i = 0; i < 10; ++i) {
-            dpfit[i] = buffer.readFloat(o); o += 4;
-        }
-        
+    
+        buffer.readFloats(o, pref1.data(), 3);
+        o += 12;
+        buffer.readFloats(o, pfit.data(), 4);
+        o += 16;
+        buffer.readFloats(o, dpfit.data(), 10);
+        o += 40;        
+  
         chi2      = buffer.readFloat(o); o += 4;
         ndf       = buffer.readShort(o); o += 2;
         punfit    = buffer.readShort(o); o += 2;
