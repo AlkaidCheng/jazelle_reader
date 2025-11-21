@@ -83,6 +83,14 @@ namespace jazelle
 
         void clear() { m_banks.clear(); } // Keeps capacity, avoids reallocation next event
 
+        /**
+         * @brief Pre-allocates memory for the underlying vector.
+         * Used by JazelleFile to prevent reallocations when the size is known from the TOC.
+         */
+        void reserve(size_t capacity) {
+            m_banks.reserve(capacity);
+        }
+
     private:
         // Contiguous memory storage. 
         // Note: T must be move-constructible (generated default is usually fine).
