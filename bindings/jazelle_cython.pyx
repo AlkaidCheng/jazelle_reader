@@ -254,7 +254,7 @@ cdef class CRIDHYP:
     cdef JazelleEvent _event_ref
     
     def __init__(self):
-        raise TypeError("Cannot instantiate PyCRIDHYP directly.")
+        raise TypeError("Cannot instantiate CRIDHYP directly.")
     
     @property
     def is_full(self): return self._ptr.m_full
