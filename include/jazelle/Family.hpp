@@ -76,7 +76,10 @@ namespace jazelle
                 [](const T& bank, int32_t searchId) { return bank.getId() < searchId; });
             
             if (it != m_banks.end() && it->getId() == id) {
-                throw std::runtime_error("Duplicate bank id " + std::to_string(id));
+                throw std::runtime_error(
+                    "Duplicate bank id " + std::string(bank_name<T>) + 
+                    "(" + std::to_string(id) + ")"
+                );
             }
             return &(*m_banks.emplace(it, id));
         }
