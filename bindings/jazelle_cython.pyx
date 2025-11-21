@@ -1132,6 +1132,23 @@ cdef class JazelleFile:
         except Exception as e:
             raise RuntimeError(f"Error opening Jazelle file: {e}")
 
+    def __enter__(self):
+        """Enables use in a 'with' statement."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Called when the 'with' block ends.
+        We reset the unique_ptr, which triggers the C++ destructor immediately.
+        """
+        self.close()
+
+    def close(self):
+        """Explicitly close the file and free C++ resources."""
+        # .reset() destroys the underlying C++ object (JazelleFile), 
+        # which destroys the Impl, which destroys JazelleStream, closing the file.
+        self.cpp_obj.reset()            
+
     def read(self):
         """
         Reads and returns the next event. Returns None at End of File.
