@@ -71,9 +71,9 @@ namespace jazelle
             // Iterate over the tuple elements
             std::apply([&](auto&... families) {
                 // Fold expression: Check every family
-                ((bank_name<typename std::decay_t<decltype(families)>::BankType> == name 
+                (void)((bank_name<typename std::decay_t<decltype(families)>::BankType> == name 
                   ? (result = families.add(id), true) // Found match: add and stop
-                  : (void) false) || ...); 
+                  : false) || ...); 
             }, m_families);
 
             if (result) return result;
@@ -86,9 +86,9 @@ namespace jazelle
             // Compile-time iteration over the tuple
             std::apply([&](auto&... families) {
                 // Check matching name
-                ((families.name() == name 
+                (void)((families.name() == name 
                     ? (result = &families, true) 
-                    : (void) false) || ...); 
+                    : false) || ...); 
             }, m_families);
             
             if (!result) {
