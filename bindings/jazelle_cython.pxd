@@ -11,12 +11,13 @@ from libcpp.chrono cimport system_clock, time_point
 
 cdef extern from "jazelle/Family.hpp" namespace "jazelle":
     
-    cdef cppclass IFamily:
+    cdef cppclass CppIFamily "jazelle::IFamily":
         size_t size()
-        Bank* at(size_t index)
-        Bank* find(int32_t id)
+        string name()
+        CppBank* at(size_t index)
+        CppBank* find(int32_t id)
 
-    cdef cppclass Family[T](IFamily):
+    cdef cppclass CppFamily "jazelle::Family"[T](CppIFamily):
         T* at(size_t index)
         T* find(int32_t id)
         T* add(int32_t id)
@@ -25,58 +26,58 @@ cdef extern from "jazelle/Family.hpp" namespace "jazelle":
 # --- Utility Structs (from banks/*.hpp) ---
 
 cdef extern from "jazelle/banks/PIDVEC.hpp" namespace "jazelle":
-    cdef cppclass PIDVEC:
-        PIDVEC()
+    cdef cppclass CppPIDVEC "jazelle::PIDVEC":
+        CppPIDVEC()
         float e, mu, pi, k, p
 
 cdef extern from "jazelle/banks/CRIDHYP.hpp" namespace "jazelle":
-    cdef cppclass CRIDHYP:
-        CRIDHYP()
+    cdef cppclass CppCRIDHYP "jazelle::CRIDHYP":
+        CppCRIDHYP()
         bint m_full
         int16_t rc, nhits
         int32_t besthyp
         int16_t nhexp, nhfnd, nhbkg, mskphot
-        optional[PIDVEC] llik
+        optional[CppPIDVEC] llik
 
 # --- Bank Structs (from banks/*.hpp) ---
 # We must declare all bank structs we want to wrap.
 
 cdef extern from "jazelle/Bank.hpp" namespace "jazelle":
-    cdef cppclass Bank:
-        Bank(int32_t)
+    cdef cppclass CppBank "jazelle::Bank":
+        CppBank(int32_t)
         int32_t getId()
 
 cdef extern from "jazelle/banks/IEVENTH.hpp" namespace "jazelle":
-    cdef cppclass IEVENTH(Bank):
-        IEVENTH()
+    cdef cppclass CppIEVENTH "jazelle::IEVENTH"(CppBank):
+        CppIEVENTH()
         int32_t header, run, event, evttype, trigger
         float weight
         system_clock.time_point evttime
 
 cdef extern from "jazelle/banks/MCHEAD.hpp" namespace "jazelle":
-    cdef cppclass MCHEAD(Bank):
-        MCHEAD(int32_t)
+    cdef cppclass CppMCHEAD "jazelle::MCHEAD"(CppBank):
+        CppMCHEAD(int32_t)
         int32_t ntot, origin
         float ipx, ipy, ipz
 
 cdef extern from "jazelle/banks/MCPART.hpp" namespace "jazelle":
-    cdef cppclass MCPART(Bank):
-        MCPART(int32_t)
+    cdef cppclass CppMCPART "jazelle::MCPART"(CppBank):
+        CppMCPART(int32_t)
         float e, ptot, charge
         int32_t ptype, origin, parent_id
         float p[3]
         float xt[3]
 
 cdef extern from "jazelle/banks/PHPSUM.hpp" namespace "jazelle":
-    cdef cppclass PHPSUM(Bank):
-        PHPSUM(int32_t)
+    cdef cppclass CppPHPSUM "jazelle::PHPSUM"(CppBank):
+        CppPHPSUM(int32_t)
         float px, py, pz, x, y, z, charge
         int32_t status
         double getPTot()
 
 cdef extern from "jazelle/banks/PHCHRG.hpp" namespace "jazelle":
-    cdef cppclass PHCHRG(Bank):
-        PHCHRG(int32_t)
+    cdef cppclass CppPHCHRG "jazelle::PHCHRG"(CppBank):
+        CppPHCHRG(int32_t)
         float hlxpar[6]
         float dhlxpar[15]
         float bnorm, impact, b3norm, impact3
@@ -93,8 +94,8 @@ cdef extern from "jazelle/banks/PHCHRG.hpp" namespace "jazelle":
         int32_t dedx
 
 cdef extern from "jazelle/banks/PHKLUS.hpp" namespace "jazelle":
-    cdef cppclass PHKLUS(Bank):
-        PHKLUS(int32_t)
+    cdef cppclass CppPHKLUS "jazelle::PHKLUS"(CppBank):
+        CppPHKLUS(int32_t)
         int32_t status, nhit2, nhit3
         float eraw, cth, wcth, phi, wphi
         float elayer[8]
@@ -102,8 +103,8 @@ cdef extern from "jazelle/banks/PHKLUS.hpp" namespace "jazelle":
         float cth3, wcth3, phi3, wphi3
 
 cdef extern from "jazelle/banks/PHWIC.hpp" namespace "jazelle":
-    cdef cppclass PHWIC(Bank):
-        PHWIC(int32_t)
+    cdef cppclass CppPHWIC "jazelle::PHWIC"(CppBank):
+        CppPHWIC(int32_t)
         int16_t idstat, nhit, nhit45, npat, nhitpat, syshit
         float qpinit, t1, t2, t3
         int32_t hitmiss
@@ -121,23 +122,23 @@ cdef extern from "jazelle/banks/PHWIC.hpp" namespace "jazelle":
         int16_t matchNdf
 
 cdef extern from "jazelle/banks/PHCRID.hpp" namespace "jazelle":
-    cdef cppclass PHCRID(Bank):
-        PHCRID(int32_t)
+    cdef cppclass CppPHCRID "jazelle::PHCRID"(CppBank):
+        CppPHCRID(int32_t)
         int32_t ctlword
         float norm
         int16_t rc, geom, trkp, nhits
         CRIDHYP liq, gas
-        PIDVEC llik
+        CppPIDVEC llik
 
 cdef extern from "jazelle/banks/PHKTRK.hpp" namespace "jazelle":
-    cdef cppclass PHKTRK(Bank):
-        PHKTRK(int32_t)
+    cdef cppclass CppPHKTRK "jazelle::PHKTRK"(CppBank):
+        CppPHKTRK(int32_t)
         pass # Stub bank
 
 cdef extern from "jazelle/banks/PHKELID.hpp" namespace "jazelle":
-    cdef cppclass PHKELID(Bank):
-        PHKELID(int32_t)
-        PHCHRG* phchrg # The linked bank
+    cdef cppclass CppPHKELID "jazelle::PHKELID"(CppBank):
+        CppPHKELID(int32_t)
+        CppPHCHRG* phchrg # The linked bank
         int16_t idstat, prob
         float phi, theta, qp, dphi, dtheta, dqp
         float tphi, ttheta, isolat, em1, em12, dem12, had1
@@ -150,28 +151,17 @@ cdef extern from "jazelle/JazelleEvent.hpp" namespace "jazelle":
     cdef cppclass CppJazelleEvent "jazelle::JazelleEvent":
         CppJazelleEvent() except +
         void clear()
-        IEVENTH ieventh
+        CppIEVENTH ieventh
 
-        Family[MCHEAD]  mcheadFamily
-        Family[MCPART]  mcpartFamily
-        Family[PHPSUM]  phpsumFamily
-        Family[PHCHRG]  phchrgFamily
-        Family[PHKLUS]  phklusFamily
-        Family[PHWIC]   phwicFamily
-        Family[PHCRID]  phcridFamily
-        Family[PHKTRK]  phktrkFamily
-        Family[PHKELID] phkelidFamily        
+        CppFamily[T]& get[T]()      
 
-        # Convenience finders
-        MCHEAD* findMCHEAD(int32_t id)
-        MCPART* findMCPART(int32_t id)
-        PHPSUM* findPHPSUM(int32_t id)
-        PHCHRG* findPHCHRG(int32_t id)
-        PHKLUS* findPHKLUS(int32_t id)
-        PHWIC* findPHWIC(int32_t id)
-        PHCRID* findPHCRID(int32_t id)
-        PHKTRK* findPHKTRK(int32_t id)
-        PHKELID* findPHKELID(int32_t id)
+        vector[pair[string, CppIFamily*]] getFamilies()
+
+        CppBank* add(string, int32_t) except +
+
+        CppIFamily* getFamily(string) except +
+
+        static vector[string] getKnownBankNames()        
 
 # --- Main File Reader ---
 

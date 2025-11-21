@@ -1,11 +1,6 @@
 /**
  * @file JazelleEvent.hpp
- * @brief The main event data store, replacing the Jazelle.java singleton.
- *
- * This class, per your suggestion, is named JazelleEvent. It acts as
- * the container for all bank families for a single event.
- *
- * @see hep.sld.jazelle.Jazelle
+ * @brief The main event data store
  */
 
 #pragma once
@@ -13,101 +8,145 @@
 #include "Family.hpp"
 #include "banks/AllBanks.hpp"
 #include <string>
+#include <string_view>
+#include <tuple>
+#include <vector>
 #include <stdexcept>
+#include <algorithm>
 
 namespace jazelle
 {
     /**
      * @class JazelleEvent
-     * @brief Holds all bank data for a single processed event.
-     *
-     * This class replaces the singleton `Jazelle.java`. An instance of
-     * this class is created for each record and passed to
-     * `JazelleFile::nextRecord()` to be populated.
+     * @brief Modernized event container using tuples to reduce boilerplate.
      */
     class JazelleEvent
     {
     public:
-        // --- Member Variables ---
-        // Public for easy access by user code and Cython.
 
-        /// The event header, read directly from the stream.
+        using BankTypes = std::tuple<
+            MCHEAD, MCPART, PHPSUM, PHCHRG, PHKLUS, 
+            PHWIC, PHCRID, PHKTRK, PHKELID
+        >;
+
+        // Public Header
         IEVENTH ieventh;
 
-        // A Family manager for each bank type defined in MINIDST.java
-        Family<MCHEAD>   mcheadFamily;
-        Family<MCPART>   mcpartFamily;
-        Family<PHPSUM>   phpsumFamily;
-        Family<PHCHRG>   phchrgFamily;
-        Family<PHKLUS>   phklusFamily;
-        Family<PHWIC>    phwicFamily;
-        Family<PHCRID>   phcridFamily;
-        Family<PHKTRK>   phktrkFamily;
-        Family<PHKELID>  phkelidFamily;
-
-        /**
-         * @brief Default constructor.
-         */
         JazelleEvent() = default;
 
         /**
-         * @brief Clears all data from all bank families.
-         * Called by JazelleFile before reading the next record.
-         * @see hep.sld.jazelle.Jazelle#clear()
+         * @brief Clears all families. 
+         * Uses a C++17 fold expression to iterate the tuple at compile time.
          */
         void clear()
         {
-            // Note: ieventh is overwritten, not cleared
-            mcheadFamily.clear();
-            mcpartFamily.clear();
-            phpsumFamily.clear();
-            phchrgFamily.clear();
-            phklusFamily.clear();
-            phwicFamily.clear();
-            phcridFamily.clear();
-            phktrkFamily.clear();
-            phkelidFamily.clear();
+            // "Visit every member of the tuple and call .clear()"
+            std::apply([](auto&... families) {
+                (families.clear(), ...); 
+            }, m_families);
         }
 
         /**
-         * @brief String-based factory to add a bank by name.
-         *
-         * This replicates the logic from `Jazelle.java::family(String)`
-         * and is used by the MINIDST parser.
-         *
-         * @param familyName The name of the family (e.g., "PHCHRG").
-         * @param id The ID for the new bank.
-         * @return A base pointer to the newly created bank.
-         * @see hep.sld.jazelle.Jazelle#add(String, int)
+         * @brief Universal Accessor.
+         * Replaces findMCHEAD(), findPHCHRG(), etc.
+         * Usage: event.get<PHCHRG>().find(id);
          */
-        Bank* add(const std::string& familyName, int32_t id)
+        template <typename T>
+        Family<T>& get()
         {
-            if (familyName == "MCHEAD")   return mcheadFamily.add(id);
-            if (familyName == "MCPART")   return mcpartFamily.add(id);
-            if (familyName == "PHPSUM")   return phpsumFamily.add(id);
-            if (familyName == "PHCHRG")   return phchrgFamily.add(id);
-            if (familyName == "PHKLUS")   return phklusFamily.add(id);
-            if (familyName == "PHWIC")    return phwicFamily.add(id);
-            if (familyName == "PHCRID")   return phcridFamily.add(id);
-            if (familyName == "PHKTRK")   return phktrkFamily.add(id);
-            if (familyName == "PHKELID")  return phkelidFamily.add(id);
-            
-            // This translates the ClassNotFoundException
-            throw std::runtime_error("Unknown bank family name: " + familyName);
+            return std::get<Family<T>>(m_families);
         }
 
-        // --- Convenience Finders ---
-        // Provides a type-safe, user-friendly API.
+        /**
+         * @brief Adds a bank by string name.
+         * Iterates over the tuple types at compile-time to find the matching string.
+         */
+        Bank* add(std::string_view name, int32_t id)
+        {
+            Bank* result = nullptr;
 
-        MCHEAD* findMCHEAD  (int32_t id) { return mcheadFamily.find(id);   }
-        MCPART* findMCPART  (int32_t id) { return mcpartFamily.find(id);   }
-        PHPSUM* findPHPSUM  (int32_t id) { return phpsumFamily.find(id);   }
-        PHCHRG* findPHCHRG  (int32_t id) { return phchrgFamily.find(id);   }
-        PHKLUS* findPHKLUS  (int32_t id) { return phklusFamily.find(id);   }
-        PHWIC* findPHWIC   (int32_t id) { return phwicFamily.find(id);    }
-        PHCRID* findPHCRID  (int32_t id) { return phcridFamily.find(id);   }
-        PHKTRK* findPHKTRK  (int32_t id) { return phktrkFamily.find(id);   }
-        PHKELID* findPHKELID (int32_t id) { return phkelidFamily.find(id);  }
+            // Iterate over the tuple elements
+            std::apply([&](auto&... families) {
+                // Fold expression: Check every family
+                ((bank_name<typename std::decay_t<decltype(families)>::BankType> == name 
+                  ? (result = families.add(id), true) // Found match: add and stop
+                  : false) || ...); 
+            }, m_families);
+
+            if (result) return result;
+            throw std::runtime_error("Unknown bank family name: " + std::string(name));
+        }
+
+        IFamily* getFamily(std::string_view name)
+        {
+            IFamily* result = nullptr;
+            // Compile-time iteration over the tuple
+            std::apply([&](auto&... families) {
+                // Check matching name
+                ((families.name() == name 
+                    ? (result = &families, true) 
+                    : false) || ...); 
+            }, m_families);
+            
+            if (!result) {
+                throw std::invalid_argument("Unknown family: " + std::string(name));
+            }
+            return result;
+        }
+
+        /**
+         * @brief Returns a list of (Name, IFamily*) for Python reflection.
+         */
+        std::vector<std::pair<std::string, IFamily*>> getFamilies()
+        {
+            std::vector<std::pair<std::string, IFamily*>> result;
+            result.reserve(std::tuple_size_v<decltype(m_families)>);
+
+            std::apply([&](auto&... families) {
+                (result.push_back({
+                    std::string(bank_name<typename std::decay_t<decltype(families)>::BankType>), 
+                    &families
+                }), ...);
+            }, m_families);
+
+            return result;
+        }
+
+        static std::vector<std::string> getKnownBankNames()
+        {
+            std::vector<std::string> names;
+            names.reserve(std::tuple_size_v<BankTypes>);
+            
+            // Iterate generic tuple types, not instances
+            // We use a dummy tuple pointer to drive the template expansion
+            apply_to_types<BankTypes>([&](auto tag) {
+                using T = typename decltype(tag)::type;
+                names.emplace_back(bank_name<T>);
+            });
+            
+            return names;
+        }
+
+    private:
+        // 3. STORAGE: Transform BankTypes tuple (T...) into tuple of Families (Family<T>...)
+        //    Helper meta-function to wrap types
+        template <typename... Ts>
+        static std::tuple<Family<Ts>...> make_family_tuple(std::tuple<Ts...>*);
+
+        using FamiliesTuple = decltype(make_family_tuple((BankTypes*)nullptr));
+
+        // Helper to iterate types in a tuple without an instance
+        template <typename Tuple, typename Func>
+        static void apply_to_types(Func f) {
+            std::apply([&](auto... x) {
+                (f(type_tag<decltype(x)>{}), ...);
+            }, Tuple{}); 
+        }
+
+        // Helper tag to carry the type
+        template <typename T> struct type_tag { using type = T; };
+        
+        FamiliesTuple m_families;
     };
 
 } // namespace jazelle

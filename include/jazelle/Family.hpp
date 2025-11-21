@@ -1,6 +1,8 @@
 #pragma once
 #include "Bank.hpp"
+#include "BankTraits.hpp"
 #include <vector>
+#include <string_view>
 #include <algorithm>
 #include <stdexcept>
 
@@ -17,6 +19,8 @@ namespace jazelle
         virtual Bank* at(size_t index) = 0;
         virtual Bank* find(int32_t id) = 0;
         virtual size_t size() const = 0;
+
+        virtual std::string_view name() const = 0;
     };
 
     template <typename T>
@@ -25,6 +29,12 @@ namespace jazelle
         static_assert(std::is_base_of_v<Bank, T>, "T must derive from Bank");
 
     public:
+
+        using BankType = T;
+
+        std::string_view name() const override {
+            return bank_name<T>;
+        }
 
         /**
          * @brief Access a bank by its zero-based index in the storage vector.
