@@ -65,7 +65,7 @@ cdef class Family:
     @property
     def name(self):
         """Returns the name of the banks in this family."""
-        return self._ptr.name()
+        return (<bytes>self._ptr.name()).decode('UTF-8')
 
     @property
     def size(self):
@@ -1093,6 +1093,29 @@ cdef class JazelleEvent:
         cdef vector[string_view] cpp_names = pxd.getKnownBankNames()
         return [n.decode('utf-8') for n in cpp_names]
 
+    def to_dict(self, str orient='list', bint skip_empty=True):
+        """
+        Serializes the entire event into a dictionary.
+        
+        Args:
+            orient (str): 
+                'list' (default): Columnar format {family: {col: [vals]}}.
+                                  Empty families return {col: []}.
+                'records': Row-based format {family: [{col: val}, ...]}.
+                           Empty families return [].
+            skip_empty (bool):
+                If True (default), families with 0 banks are omitted from the dict.
+                If False, they are included with empty values (useful for consistent schemas).
+        """
+        cdef dict data = {}
+
+        data["IEVENTH"] = self.ieventh.to_dict()
+
+        for family in self.getFamilies():
+            if not skip_empty or len(family) > 0:
+                data[family.name] = family.to_dict(orient=orient)           
+        return data
+
 # --- JazelleFile Wrapper ---
 
 cdef class JazelleFile:
@@ -1108,6 +1131,16 @@ cdef class JazelleFile:
             self.cpp_obj.reset(new pxd.CppJazelleFile(s_filepath))
         except Exception as e:
             raise RuntimeError(f"Error opening Jazelle file: {e}")
+
+    def read(self):
+        """
+        Reads and returns the next event. Returns None at End of File.
+        """
+        cdef JazelleEvent event = JazelleEvent()
+        
+        if self.cpp_obj.get().nextRecord(event.cpp_event):
+            return event
+        return None            
             
     def nextRecord(self, JazelleEvent event):
         """Reads the next logical record into the provided event object."""
@@ -1124,7 +1157,7 @@ cdef class JazelleFile:
     @property
     def fileName(self):
         """The internal filename from the Jazelle header."""
-        return self.cpp_obj.get().getFileName()
+        return (<bytes>self.cpp_obj.get().getFileName()).decode('UTF-8')
 
     @property
     def creationDate(self):
@@ -1139,30 +1172,44 @@ cdef class JazelleFile:
     @property
     def lastRecordType(self):
         """The type of the last read record (e.g., 'MINIDST')."""
-        return self.cpp_obj.get().getLastRecordType()
+        return (<bytes>self.cpp_obj.get().getLastRecordType()).decode('UTF-8')
+
+    def rewind(self):
+        """
+        Resets the file pointer to the beginning of the first event.
+        Use this to iterate over the file again.
+        """
+        self.cpp_obj.get().rewind()    
 
     def __len__(self):
         return self.getTotalEvents()
 
     def __iter__(self):
-        cdef int total = self.getTotalEvents()
-        cdef int i
-        for i in range(total):
+        """
+        Iterates through events sequentially.
+        This is the most efficient way to read the file.
+        """
+
+        cdef JazelleEvent event
+        
+        while True:
             event = JazelleEvent()
-            if self.readEvent(i, event):
-                yield event
-            else:
-                raise IndexError(f"Failed to read event at index {i}")
+            if not self.cpp_obj.get().nextRecord(event.cpp_event):
+                break
+            yield event
 
     def __getitem__(self, int index):
         if index < 0:
             index += len(self)
+
+        if index < 0 or index >= len(self):
+            raise IndexError("Event index out of range")
         
         event = JazelleEvent()
         if self.readEvent(index, event):
             return event
         else:
-            raise IndexError(f"Event index {index} out of range for file with {len(self)} events.")
+            raise IndexError(f"Failed to read event at index {index}")
 
 def _register_wrappers():
     """

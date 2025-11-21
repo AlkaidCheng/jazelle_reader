@@ -113,6 +113,11 @@ namespace jazelle
          */
         std::string getLastRecordType() const;
 
+        /**
+         * @brief Rewinds the file pointer to the first event.
+         */
+        void rewind();
+
     private:
         /**
          * @struct Impl
