@@ -93,12 +93,7 @@ namespace jazelle
                     
                     if (datrec > 0)
                     {
-                        // This is tricky: datrec > 0 means the data is in the
-                        // *next* logical record.
-                        if (!stream->nextLogicalRecord())
-                        {
-                             throw std::runtime_error("Unexpected EOF looking for MINIDST data record.");
-                        }
+                        stream->nextPhysicalRecord();
                     }
 
                     // Read the entire data record

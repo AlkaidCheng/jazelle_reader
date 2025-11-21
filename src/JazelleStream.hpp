@@ -50,6 +50,8 @@ namespace jazelle
          */
         bool nextLogicalRecord();
 
+        void nextPhysicalRecord();
+
         /**
          * @brief Seeks to a specific byte offset and re-syncs the stream.
          * @param offset The absolute byte offset in the file.
@@ -141,7 +143,6 @@ namespace jazelle
         int16_t readShortHeader();
         void readPhysicalHeader();
         void readLogicalHeader();
-        void nextPhysicalRecord();
         void skip(int64_t n);
         
         /**
