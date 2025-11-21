@@ -1066,7 +1066,7 @@ cdef class JazelleEvent:
         # Look up wrapper based on naming convention
         if py_name not in _WRAPPER_MAP:
             # Safe fallback: C++ has it, but Cython wrapper is missing
-            raise NotImplementedError(f"C++ family '{py_name}' exists, but no 'Py{py_name}' wrapper was found.")
+            raise NotImplementedError(f"C++ family '{py_name}' exists, but no '{py_name}' wrapper was found.")
 
         return wrap_family(fm_ptr, self, _WRAPPER_MAP[py_name])
 
