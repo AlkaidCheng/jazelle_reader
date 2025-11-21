@@ -278,7 +278,7 @@ namespace jazelle
         }
 
         m_impl->m_index_built = true;
-        m_impl->stream->rewind();
+        m_impl->stream->rewind(); // Rewind to the start after building the index
     }
 
     int32_t JazelleFile::getTotalEvents()
