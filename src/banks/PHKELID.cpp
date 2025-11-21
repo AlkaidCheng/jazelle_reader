@@ -16,7 +16,7 @@ namespace jazelle
         // Read the pointer ID first
         int32_t pid = buffer.readInt(o);
         m_phchrg_id = pid >> 16;
-        phchrg = event.findPHCHRG(m_phchrg_id);
+        phchrg = event.get<PHCHRG>().find(m_phchrg_id);
         o += 4;
         
         idstat  = buffer.readShort(o); o += 2;
