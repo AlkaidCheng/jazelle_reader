@@ -115,6 +115,7 @@ cdef class Family:
         # 1. Allocate ONE reusable wrapper (Flyweight)
         # We use __new__ to bypass __init__ checks
         cdef Bank flyweight = self._wrapper_class.__new__(self._wrapper_class)
+        flyweight._ptr = NULL
         flyweight._event_ref = self._event_ref
         
         for i in range(size):
