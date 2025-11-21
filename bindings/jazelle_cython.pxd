@@ -127,7 +127,7 @@ cdef extern from "jazelle/banks/PHCRID.hpp" namespace "jazelle":
         int32_t ctlword
         float norm
         int16_t rc, geom, trkp, nhits
-        CRIDHYP liq, gas
+        CppCRIDHYP liq, gas
         CppPIDVEC llik
 
 cdef extern from "jazelle/banks/PHKTRK.hpp" namespace "jazelle":
