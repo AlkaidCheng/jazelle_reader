@@ -9,6 +9,9 @@ from libcpp.optional cimport optional
 from libc.stdint cimport int16_t, int32_t, int64_t
 from libcpp.chrono cimport system_clock, time_point
 
+from libcpp.vector cimport vector
+from libcpp.utility cimport pair
+
 cdef extern from "jazelle/Family.hpp" namespace "jazelle":
     
     cdef cppclass CppIFamily "jazelle::IFamily":

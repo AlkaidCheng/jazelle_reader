@@ -10,6 +10,8 @@ import datetime
 from libc.stdint cimport int16_t, int32_t
 from libcpp.chrono cimport system_clock, to_time_t
 
+from libcpp.vector cimport vector
+
 cimport jazelle_cython as pxd
 
 # --- Helpers ---
