@@ -135,16 +135,21 @@ namespace jazelle
 
         using FamiliesTuple = decltype(make_family_tuple((BankTypes*)nullptr));
 
-        // Helper to iterate types in a tuple without an instance
-        template <typename Tuple, typename Func>
-        static void apply_to_types(Func f) {
-            std::apply([&](auto... x) {
-                (f(type_tag<decltype(x)>{}), ...);
-            }, Tuple{}); 
+        // Helper tag to carry the type information
+        template <typename T> struct type_tag { using type = T; };
+
+        // Implementation details for type iteration
+        // FIX: Use std::tuple_element_t to access types by index, avoiding instantiation.
+        template <typename Tuple, typename Func, std::size_t... Is>
+        static void apply_to_types_impl(Func f, std::index_sequence<Is...>) {
+            (f(type_tag<std::tuple_element_t<Is, Tuple>>{}), ...);
         }
 
-        // Helper tag to carry the type
-        template <typename T> struct type_tag { using type = T; };
+        // Public helper to iterate types in a tuple without an instance
+        template <typename Tuple, typename Func>
+        static void apply_to_types(Func f) {
+            apply_to_types_impl<Tuple>(f, std::make_index_sequence<std::tuple_size_v<Tuple>>{});
+        }
         
         FamiliesTuple m_families;
     };
