@@ -394,7 +394,7 @@ cdef class MCHEAD(Bank):
         c['ipy'].append(ptr.ipy)
         c['ipz'].append(ptr.ipz)        
 
-cdef class MCPART(PyBank):
+cdef class MCPART(Bank):
     """Wrapper for MCPART (Monte Carlo Particle) Bank."""
     def __init__(self): raise TypeError("No direct instantiation")
     @property
@@ -444,7 +444,7 @@ cdef class MCPART(PyBank):
         c['p'].append([ptr.p[i] for i in range(3)])
         c['xt'].append([ptr.xt[i] for i in range(3)])        
 
-cdef class PHPSUM(PyBank):
+cdef class PHPSUM(Bank):
     """Wrapper for PHPSUM (Physics Particle Summary) Bank."""
     def __init__(self): raise TypeError("No direct instantiation")
     @property
@@ -491,7 +491,7 @@ cdef class PHPSUM(PyBank):
         c['status'].append(ptr.status)
         c['ptot'].append(ptr.getPTot())        
 
-cdef class PHCHRG(PyBank):
+cdef class PHCHRG(Bank):
     """Wrapper for PHCHRG (Charged Track) Bank."""
     def __init__(self): raise TypeError("No direct instantiation")
     @property
@@ -609,7 +609,7 @@ cdef class PHCHRG(PyBank):
         c['tkpar'].append([ptr.tkpar[i] for i in range(5)])
         c['dtkpar'].append([ptr.dtkpar[i] for i in range(15)])        
 
-cdef class PHKLUS(PyBank):
+cdef class PHKLUS(Bank):
     """Wrapper for PHKLUS (Calorimeter Cluster) Bank."""
     def __init__(self): raise TypeError("No direct instantiation")
     @property
@@ -688,7 +688,7 @@ cdef class PHKLUS(PyBank):
         c['wphi3'].append(ptr.wphi3)
         c['elayer'].append([ptr.elayer[i] for i in range(8)])        
 
-cdef class PHWIC(PyBank):
+cdef class PHWIC(Bank):
     """Wrapper for PHWIC (Warm Iron Calorimeter) Bank."""
     def __init__(self): raise TypeError("No direct instantiation")
     @property
@@ -804,7 +804,7 @@ cdef class PHWIC(PyBank):
         c['pfit'].append([ptr.pfit[i] for i in range(4)])
         c['dpfit'].append([ptr.dpfit[i] for i in range(10)])
 
-cdef class PHCRID(PyBank):
+cdef class PHCRID(Bank):
     """Wrapper for PHCRID (Cerenkov Ring Imaging) Bank."""
     def __init__(self): raise TypeError("No direct instantiation")
     @property
@@ -855,7 +855,7 @@ cdef class PHCRID(PyBank):
         c['gas'].append(self.gas.to_dict())
         c['llik'].append(self.llik.to_dict())        
 
-cdef class PHKTRK(PyBank):
+cdef class PHKTRK(Bank):
     """Wrapper for PHKTRK (Stub) Bank."""
     def __init__(self): raise TypeError("No direct instantiation")
     
@@ -868,7 +868,7 @@ cdef class PHKTRK(PyBank):
     cpdef void fill_columns(self, dict c):
         c['id'].append(self._ptr.getId())
 
-cdef class PHKELID(PyBank):
+cdef class PHKELID(Bank):
     """Wrapper for PHKELID (Calorimeter/Electron ID) Bank."""
     def __init__(self): raise TypeError("No direct instantiation")
     @property
