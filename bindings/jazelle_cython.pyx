@@ -1113,7 +1113,7 @@ cdef class JazelleEvent:
 
         for family in self.getFamilies():
             if not skip_empty or len(family) > 0:
-                data[family.name] = family.to_dict(orient=orient)           
+                data[family.name] = family.to_dict(orient=orient)
         return data
 
 # --- JazelleFile Wrapper ---
