@@ -49,9 +49,19 @@ namespace jazelle
         }
 
         T* find(int32_t id) override {
-            // Binary search is O(log N) but on contiguous memory (fast)
+            // Fast Path: Index often matches ID-1 in Monte Carlo
+            if (id > 0 && static_cast<size_t>(id) <= m_banks.size()) {
+                // Check the likely candidate directly
+                T& candidate = m_banks[id - 1];
+                if (candidate.getId() == id) {
+                    return &candidate;
+                }
+            }
+
+            // Slow Path: Binary Search
             auto it = std::lower_bound(m_banks.begin(), m_banks.end(), id, 
                  [](const T& bank, int32_t searchId) { return bank.getId() < searchId; });
+            
             if (it != m_banks.end() && it->getId() == id) {
                 return &(*it);
             }
@@ -76,7 +86,10 @@ namespace jazelle
                 [](const T& bank, int32_t searchId) { return bank.getId() < searchId; });
             
             if (it != m_banks.end() && it->getId() == id) {
-                throw std::runtime_error("Duplicate bank id " + std::to_string(id));
+                throw std::runtime_error(
+                    "Duplicate bank id " + std::string(bank_name<T>) + 
+                    "(" + std::to_string(id) + ")"
+                );
             }
             return &(*m_banks.emplace(it, id));
         }
