@@ -1068,7 +1068,7 @@ cdef class JazelleEvent:
 
     def getFamilies(self):
         """
-        Returns a tuple of PyFamily objects for all bank families in this event.
+        Returns a tuple of Family objects for all bank families in this event.
         """
         if self._cached_families is not None:
             return self._cached_families
