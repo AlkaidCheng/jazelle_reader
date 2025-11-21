@@ -1179,7 +1179,7 @@ cdef class JazelleFile:
         Resets the file pointer to the beginning of the first event.
         Use this to iterate over the file again.
         """
-        self.cpp_obj.get().rewind()    
+        self.cpp_obj.get().rewind()
 
     def __len__(self):
         return self.getTotalEvents()
