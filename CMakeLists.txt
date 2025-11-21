@@ -62,6 +62,12 @@ Python_add_library(jazelle_cython MODULE
     ${CYTHON_OUTPUT}
 )
 
+if(APPLE)
+    target_compile_options(jazelle_cython PRIVATE
+        -Wno-deprecated-declarations
+    )
+endif()
+
 # Set the output name to match what Python expects
 set_target_properties(jazelle_cython PROPERTIES
     OUTPUT_NAME "jazelle_cython"

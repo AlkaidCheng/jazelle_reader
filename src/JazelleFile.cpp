@@ -132,7 +132,19 @@ namespace jazelle
         void parseMiniDst(const PHMTOC& toc, JazelleEvent& event)
         {
             int32_t offset = 0;
-            // This parsing order is a direct translation of MINIDST.java
+
+            // --- OPTIMIZATION: Pre-allocate vectors using TOC counts ---
+            // This avoids reallocation as we push_back in the loops.
+            // Note: Assuming Family<T> has a reserve(size_t) method.
+            event.get<MCHEAD>().reserve(1); 
+            event.get<MCPART>().reserve(toc.m_nMcPart);
+            event.get<PHPSUM>().reserve(toc.m_nPhPSum);
+            event.get<PHCHRG>().reserve(toc.m_nPhChrg);
+            event.get<PHKLUS>().reserve(toc.m_nPhKlus);
+            event.get<PHWIC>().reserve(toc.m_nPhWic);
+            event.get<PHCRID>().reserve(toc.m_nPhCrid);
+            event.get<PHKTRK>().reserve(toc.m_nPhKTrk);
+            event.get<PHKELID>().reserve(toc.m_nPhKElId);
 
             // Read MCHead (ID 1, not read from stream)
             Bank* mchead = event.add("MCHEAD", 1);
@@ -199,16 +211,20 @@ namespace jazelle
                 Bank* phkelid = event.add("PHKELID", id);
                 offset += phkelid->read(dataBufferView, offset, event);
             }
+
             // Resolve MCPART parent pointers
-            size_t mcpartSize = event.mcpartFamily.size();
+            // UPDATE: Use the new template accessor to get the family
+            auto& mcpartFamily = event.get<MCPART>();
+            size_t mcpartSize = mcpartFamily.size();
+            
             for (size_t i = 0; i < mcpartSize; ++i)
             {
-                MCPART* part = event.mcpartFamily.at(i);
+                MCPART* part = mcpartFamily.at(i);
                 
                 if (part && part->parent_id > 0)
                 {
-                    // Look up the parent by ID using the event's finder
-                    part->parent = event.findMCPART(part->parent_id);
+                    // UPDATE: Use the family's find method directly
+                    part->parent = mcpartFamily.find(part->parent_id);
                 }
                 else if (part)
                 {
@@ -223,29 +239,22 @@ namespace jazelle
     JazelleFile::JazelleFile(const std::string& filepath)
     try : m_impl(std::make_unique<Impl>(filepath))
     {
-        // Constructor body is intentionally empty.
-        // The Impl constructor does all the work.
     }
     catch (const std::exception& e)
     {
-        // Add context to exceptions thrown during opening
         throw std::runtime_error("Failed to open JazelleFile '" + filepath + "': " + e.what());
     }
 
     JazelleFile::~JazelleFile()
     {
-        // m_impl is automatically destroyed, closing files
     }
 
     bool JazelleFile::nextRecord(JazelleEvent& event)
     {
-        // 1. Advance the stream to the next logical record
         if (!m_impl->stream->nextLogicalRecord())
         {
             return false; // Clean EOF
         }
-        
-        // 2. Read the record at the new position
         return m_impl->readCurrentRecord(event);
     }
 
@@ -255,27 +264,21 @@ namespace jazelle
     {
         if (m_impl->m_index_built) return;
 
-        // Rewind to the start of the *first data record*
         m_impl->stream->rewind();
         m_impl->m_event_offsets.clear();
 
         while (true)
         {
-            // Get the offset of the header we just rewound to (or
-            // advanced to in the last loop iteration).
             m_impl->m_event_offsets.push_back(m_impl->stream->getCurrentRecordOffset());
 
-            // Advance to the *next* record's header
             if (!m_impl->stream->nextLogicalRecord())
             {
-                // We hit EOF, so the last record we added was the final one.
                 break;
             }
         }
 
         m_impl->m_index_built = true;
-        // Rewind again so the file is ready for reading
-        m_impl->stream->rewind();
+        m_impl->stream->rewind(); // Rewind to the start after building the index
     }
 
     int32_t JazelleFile::getTotalEvents()
@@ -296,17 +299,14 @@ namespace jazelle
 
         if (index < 0 || index >= m_impl->m_event_offsets.size())
         {
-            return false; // Index out of bounds
+            return false;
         }
 
-        // 1. Seek the stream to the pre-calculated offset
         int64_t offset = m_impl->m_event_offsets[index];
         m_impl->stream->seekTo(offset);
 
-        // 2. Read the record at that exact position
         return m_impl->readCurrentRecord(event);
     }
-
 
     // --- Accessors ---
 
