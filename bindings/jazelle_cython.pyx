@@ -154,7 +154,7 @@ cdef class Family:
 
 
 cdef object wrap_family(pxd.CppIFamily* ptr, JazelleEvent event, type py_class):
-    cdef PyFamily obj = PyFamily.__new__(PyFamily)
+    cdef Family obj = Family.__new__(Family)
     obj._ptr = ptr
     obj._event_ref = event
     obj._wrapper_class = py_class
