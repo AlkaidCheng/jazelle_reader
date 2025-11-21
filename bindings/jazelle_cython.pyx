@@ -1006,6 +1006,7 @@ cdef class JazelleEvent:
     def clear(self):
         """Clears all data from the event."""
         self.cpp_event.clear()
+        self._cached_families = None
         
     @property
     def ieventh(self):
