@@ -349,7 +349,7 @@ cdef class IEVENTH(Bank):
         }
 
     @staticmethod
-    cdef dict bulk_extract(Family family):
+    def bulk_extract(Family family):
         cdef size_t count = len(family)
         cdef pxd.CppIFamily* fam_ptr = family._ptr
         
