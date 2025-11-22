@@ -18,6 +18,7 @@
 #include <string>
 #include <memory>
 #include <chrono>
+#include <functional>
 
 namespace jazelle
 {
@@ -118,15 +119,65 @@ namespace jazelle
          */
         void rewind();
 
+        /**
+         * @brief Parallel event reader with callback
+         * @param start_idx Starting event index
+         * @param count Number of events to read
+         * @param callback Function called for each event (must be thread-safe)
+         * @param num_threads Number of reader threads (0 = auto)
+         */
+        void readEventsParallel(
+            int32_t start_idx,
+            int32_t count,
+            std::function<void(int32_t idx, JazelleEvent&)> callback,
+            size_t num_threads = 0
+        );
+        
+        /**
+         * @brief Read multiple events into a vector (parallel)
+         * @return Vector of events in order
+         */
+        std::vector<JazelleEvent> readEventsBatch(
+            int32_t start_idx,
+            int32_t count,
+            size_t num_threads = 0
+        );
+
+        /**
+         * @brief Context for event parsing (used internally and by parallel readers)
+         */
+        struct ParseContext {
+            JazelleStream* stream;
+            DataBuffer* dataBufferView;
+            std::vector<uint8_t>* rawDataBuffer;
+            
+            ParseContext(JazelleStream* s, DataBuffer* db, std::vector<uint8_t>* rb)
+                : stream(s), dataBufferView(db), rawDataBuffer(rb) {}
+        };
+        
+        /**
+         * @brief Core parsing logic shared by sequential and parallel reads
+         * @param ctx Parsing context with stream and buffers
+         * @param event Event object to populate
+         * @return true if successfully parsed, false on EOF or error
+         */
+        static bool parseEvent(ParseContext& ctx, JazelleEvent& event);
+        
+        /**
+         * @brief Parse MINIDST data buffer into event
+         */
+        static void parseMiniDst(const PHMTOC& toc, JazelleEvent& event, 
+                                const DataBuffer& buffer);
+
+
     private:
         /**
          * @struct Impl
          * @brief Private implementation (PIMPL) idiom.
          */
         struct Impl;
-        
-        /// @brief Unique pointer to the private implementation.
         std::unique_ptr<Impl> m_impl;
+
     };
 
 } // namespace jazelle
