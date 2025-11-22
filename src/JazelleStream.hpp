@@ -42,6 +42,8 @@ namespace jazelle
          */
         ~JazelleStream();
 
+        std::string getFilePath() const { return m_filepath; }
+
         // --- Record Navigation ---
 
         /**
@@ -151,6 +153,7 @@ namespace jazelle
         int32_t read();
 
         std::ifstream m_fileStream;
+        std::string m_filepath;
         
         std::vector<uint8_t> m_string_buffer; // Re-usable buffer
 
