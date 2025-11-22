@@ -696,7 +696,7 @@ cdef class PHCHRG(Bank):
     @property
     def dtkpar(self): return [(<pxd.CppPHCHRG*>self._ptr).dtkpar[i] for i in range(15)]
 
-    def to_dict(self):
+    cpdef dict to_dict(self):
         cdef pxd.CppPHCHRG* ptr = <pxd.CppPHCHRG*>self._ptr
         return {
             'id': ptr.getId(), 'bnorm': ptr.bnorm, 'impact': ptr.impact, 
