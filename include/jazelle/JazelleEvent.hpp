@@ -34,6 +34,26 @@ namespace jazelle
         IEVENTH ieventh;
 
         JazelleEvent() = default;
+        
+        // Copy constructor
+        JazelleEvent(const JazelleEvent& other) {
+            // Deep copy all families
+            copyFrom(other);
+        }
+
+        // Copy assignment
+        JazelleEvent& operator=(const JazelleEvent& other) {
+            if (this != &other) {
+                clear();
+                copyFrom(other);
+                resolvePointers();
+            }
+            return *this;
+        }
+        
+        // Move operations for efficiency
+        JazelleEvent(JazelleEvent&& other) noexcept = default;
+        JazelleEvent& operator=(JazelleEvent&& other) noexcept = default;
 
         /**
          * @brief Clears all families. 
@@ -128,8 +148,23 @@ namespace jazelle
         }
 
     private:
-        // 3. STORAGE: Transform BankTypes tuple (T...) into tuple of Families (Family<T>...)
-        //    Helper meta-function to wrap types
+
+        void copyFrom(const JazelleEvent& other) {
+            // Copy the header
+            ieventh = other.ieventh;
+            
+            // Copy all families using tuple magic
+            copyFamilies(other, std::make_index_sequence<std::tuple_size_v<FamiliesTuple>>{});
+        }
+
+        template<std::size_t... Is>
+        void copyFamilies(const JazelleEvent& other, std::index_sequence<Is...>) {
+            // Copy each family
+            ((std::get<Is>(m_families) = std::get<Is>(other.m_families)), ...);
+        }
+
+        //  Transform BankTypes tuple (T...) into tuple of Families (Family<T>...)
+        //  Helper meta-function to wrap types
         template <typename... Ts>
         static std::tuple<Family<Ts>...> make_family_tuple(std::tuple<Ts...>*);
 
@@ -149,6 +184,37 @@ namespace jazelle
         template <typename Tuple, typename Func>
         static void apply_to_types(Func f) {
             apply_to_types_impl<Tuple>(f, std::make_index_sequence<std::tuple_size_v<Tuple>>{});
+        }
+
+        /**
+         * @brief Re-resolve all cross-bank pointers after copying
+         * This is necessary because raw pointers don't survive deep copies
+         */
+        void resolvePointers() {
+            // Resolve MCPART parent pointers
+            auto& mcPartFam = get<MCPART>();
+            size_t mcpartSize = mcPartFam.size();
+            for (size_t i = 0; i < mcpartSize; ++i) {
+                MCPART* part = mcPartFam.at(i);
+                if (part && part->parent_id > 0) {
+                    part->parent = mcPartFam.find(part->parent_id);
+                } else if (part) {
+                    part->parent = nullptr;
+                }
+            }
+            
+            // Resolve PHKELID -> PHCHRG pointers
+            auto& phKelidFam = get<PHKELID>();
+            auto& phChrgFam = get<PHCHRG>();
+            size_t phkelidSize = phKelidFam.size();
+            for (size_t i = 0; i < phkelidSize; ++i) {
+                PHKELID* kelid = phKelidFam.at(i);
+                if (kelid && kelid->m_phchrg_id > 0) {
+                    kelid->phchrg = phChrgFam.find(kelid->m_phchrg_id);
+                } else if (kelid) {
+                    kelid->phchrg = nullptr;
+                }
+            }
         }
         
         FamiliesTuple m_families;

@@ -1668,6 +1668,135 @@ cdef class JazelleFile:
         else:
             raise IndexError(f"Failed to read event at index {index}")
 
+    def read_parallel(self, int start=0, int count=-1, int num_threads=0):
+        """
+        Read events in parallel and return as list.
+        
+        Args:
+            start: Starting event index
+            count: Number of events (-1 for all remaining)
+            num_threads: Number of threads (0 for auto)
+            
+        Returns:
+            List of JazelleEvent objects
+        
+        Example:
+            >>> with JazelleFile('data.jazelle') as f:
+            ...     events = f.read_parallel(0, 1000, num_threads=8)
+            ...     print(f"Read {len(events)} events")
+        """
+        if count < 0:
+            count = len(self) - start
+        
+        # Call C++ method which returns a vector of events
+        cdef vector[CppJazelleEvent] cpp_events = self.cpp_obj.get().readEventsBatch(
+            start, count, num_threads
+        )
+        
+        # Convert C++ vector to Python list
+        cdef list py_events = []
+        cdef JazelleEvent py_event
+        cdef size_t i
+        
+        for i in range(cpp_events.size()):
+            py_event = JazelleEvent.__new__(JazelleEvent)
+            # Copy the C++ event (uses copy constructor)
+            py_event.cpp_event = cpp_events[i]
+            py_events.append(py_event)
+        
+        return py_events
+    
+    def iter_parallel(self, int batch_size=100, int num_threads=0):
+        """
+        Parallel iterator yielding batches of events.
+        
+        This is the most memory-efficient way to process large files,
+        as it only keeps one batch in memory at a time.
+        
+        Args:
+            batch_size: Number of events per batch
+            num_threads: Number of reader threads (0 for auto)
+            
+        Yields:
+            List of JazelleEvent objects (batch_size events per iteration)
+        
+        Example:
+            >>> with JazelleFile('data.jazelle') as f:
+            ...     for batch in f.iter_parallel(batch_size=1000, num_threads=8):
+            ...         # Process batch
+            ...         for event in batch:
+            ...             print(event.ieventh.run, event.ieventh.event)
+        """
+        cdef int total = len(self)
+        cdef int start = 0
+        
+        while start < total:
+            count = min(batch_size, total - start)
+            yield self.read_parallel(start, count, num_threads)
+            start += count
+    
+    def to_dict_parallel(self, str orient='list', bint skip_empty=True, 
+                        int batch_size=100, int num_threads=0):
+        """
+        Convert entire file to dictionary format using parallel reading.
+        
+        This is ideal for converting to other formats like HDF5 or Parquet.
+        
+        Args:
+            orient: 'list' for columnar data, 'records' for row-based
+            skip_empty: Skip empty families
+            batch_size: Events per batch for processing
+            num_threads: Reader threads (0 for auto)
+            
+        Returns:
+            Dictionary with event data
+            
+        Example:
+            >>> with JazelleFile('data.jazelle') as f:
+            ...     data = f.to_dict_parallel(batch_size=1000, num_threads=8)
+            ...     # data['PHPSUM']['px'] is now a numpy array
+        """
+        from collections import defaultdict
+        import numpy as np
+        
+        # Accumulator for all batches
+        all_data = defaultdict(lambda: defaultdict(list))
+        
+        # Process in parallel batches
+        for batch in self.iter_parallel(batch_size=batch_size, num_threads=num_threads):
+            for event in batch:
+                event_dict = event.to_dict(orient='list', skip_empty=skip_empty)
+                
+                # Accumulate data
+                for family_name, family_data in event_dict.items():
+                    if family_name == 'IEVENTH':
+                        # Special case: single bank per event
+                        for key, value in family_data.items():
+                            all_data[family_name][key].append(value)
+                    else:
+                        # Multiple banks per event
+                        for key, value in family_data.items():
+                            if isinstance(value, np.ndarray):
+                                all_data[family_name][key].append(value)
+                            else:
+                                all_data[family_name][key].extend(value)
+        
+        # Convert lists to numpy arrays
+        result = {}
+        for family_name, family_data in all_data.items():
+            result[family_name] = {}
+            for key, value in family_data.items():
+                if isinstance(value, list) and len(value) > 0:
+                    if isinstance(value[0], np.ndarray):
+                        # Concatenate arrays
+                        result[family_name][key] = np.concatenate(value)
+                    else:
+                        result[family_name][key] = np.array(value)
+                else:
+                    result[family_name][key] = value
+        
+        return dict(result)            
+
 
 # ==============================================================================
 # Initialization
