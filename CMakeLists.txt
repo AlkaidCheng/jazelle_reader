@@ -11,6 +11,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ------------------------------------------------------------------
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.14")
+    # Modern approach: Use FindPython's NumPy component
+    find_package(Python REQUIRED COMPONENTS NumPy)
+    set(NUMPY_INCLUDE_DIRS ${Python_NumPy_INCLUDE_DIRS})
+else()
+    # Fallback for older CMake versions
+    execute_process(
+        COMMAND "${Python_EXECUTABLE}" -c "import numpy; print(numpy.get_include())"
+        OUTPUT_VARIABLE NUMPY_INCLUDE_DIRS
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+endif()
+
 # ------------------------------------------------------------------
 #  Cythonize the .pyx file
 # ------------------------------------------------------------------
@@ -87,6 +100,7 @@ target_include_directories(jazelle_cython PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${Python_INCLUDE_DIRS}
+    ${NUMPY_INCLUDE_DIRS}
 )
 
 # ------------------------------------------------------------------
