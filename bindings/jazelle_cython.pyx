@@ -2951,7 +2951,7 @@ cdef class JazelleFile:
         max_events : int, optional
             Maximum number of events to process (None for all)
             
-        batch_size : int, default 100
+        batch_size : int, default 1000
             Events per batch for parallel processing:
             - 0 or 1: Sequential processing (no parallelization)
             - >1: Parallel batch processing
