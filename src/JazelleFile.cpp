@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <iostream>
+#include <optional>
 #include <vector>
 #include <thread>
 
@@ -326,12 +327,12 @@ namespace jazelle
 
         while (true)
         {
-            m_impl->m_event_offsets.push_back(m_impl->stream->getCurrentRecordOffset());
-
             if (!m_impl->stream->nextLogicalRecord())
             {
                 break;
             }
+            
+            m_impl->m_event_offsets.push_back(m_impl->stream->getCurrentRecordOffset());
         }
 
         m_impl->m_index_built = true;
@@ -441,7 +442,9 @@ namespace jazelle
         // Clamp to reasonable values
         if (num_threads > 32) num_threads = 32;
         
-        int32_t end_idx = std::min(start_idx + count, getTotalEvents());
+        // Physical total
+        int32_t physical_total = m_impl->m_event_offsets.size();
+        int32_t end_idx = std::min(start_idx + count, physical_total);
         if (start_idx >= end_idx) return;
         
         // Get filepath once
@@ -562,7 +565,7 @@ namespace jazelle
                     int32_t local_idx = idx - start_idx;
                     if (local_idx >= 0 && local_idx < count) {
                         // Direct assignment without mutex (pre-allocated slots)
-                        events[local_idx] = event;
+                        events[local_idx] = std::move(event);
                         events_written.fetch_add(1, std::memory_order_relaxed);
                     }
                 } catch (...) {

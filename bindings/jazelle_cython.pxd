@@ -21,7 +21,7 @@ cdef extern from "jazelle/Family.hpp" namespace "jazelle":
         CppBank* find(int32_t id)
 
     cdef cppclass CppFamily "jazelle::Family"[T](CppIFamily):
-        T* at(size_t index)
+        #T* at(size_t index)
         T* find(int32_t id)
         T* add(int32_t id)
         void clear()

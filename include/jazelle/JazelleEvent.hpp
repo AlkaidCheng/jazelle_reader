@@ -13,7 +13,7 @@
 #include <vector>
 #include <stdexcept>
 #include <algorithm>
-
+#include <iostream>
 namespace jazelle
 {
 
