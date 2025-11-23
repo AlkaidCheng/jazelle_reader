@@ -15,7 +15,6 @@ namespace jazelle
     public:
         virtual ~IFamily() = default;
         
-        // Clean names!
         virtual Bank* at(size_t index) = 0;
         virtual Bank* find(int32_t id) = 0;
         virtual size_t size() const = 0;
@@ -35,6 +34,24 @@ namespace jazelle
         std::string_view name() const override {
             return bank_name<T>;
         }
+
+        // Default constructor
+        Family() = default;
+
+        // Copy constructor
+        Family(const Family& other) : m_banks(other.m_banks) {}
+        
+        // Copy assignment
+        Family& operator=(const Family& other) {
+            if (this != &other) {
+                m_banks = other.m_banks;
+            }
+            return *this;
+        }
+
+        // Move operations
+        Family(Family&&) = default;
+        Family& operator=(Family&&) = default;
 
         /**
          * @brief Access a bank by its zero-based index in the storage vector.

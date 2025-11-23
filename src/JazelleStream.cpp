@@ -15,6 +15,7 @@ namespace jazelle
 // --- Constructor / Destructor ---
 
 JazelleStream::JazelleStream(const std::string& filepath)
+    : m_filepath(filepath)
 {
     openFile(filepath);
     try

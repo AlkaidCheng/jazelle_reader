@@ -9,7 +9,6 @@ from libcpp.memory cimport unique_ptr
 from libcpp.optional cimport optional
 from libc.stdint cimport int16_t, int32_t, int64_t
 from libcpp.chrono cimport system_clock, time_point
-
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 
@@ -155,6 +154,7 @@ cdef extern from "jazelle/JazelleEvent.hpp" namespace "jazelle":
     cdef cppclass CppJazelleEvent "jazelle::JazelleEvent":
         
         CppJazelleEvent() except +
+        CppJazelleEvent(CppJazelleEvent&) except + # Copy constructor
         void clear()
         CppIEVENTH ieventh
 
@@ -182,3 +182,9 @@ cdef extern from "jazelle/JazelleFile.hpp" namespace "jazelle":
         system_clock.time_point getModifiedDate()
         string getLastRecordType()
         void rewind() except +
+
+        vector[CppJazelleEvent] readEventsBatch(
+            int32_t start_idx,
+            int32_t count,
+            size_t num_threads
+        ) except +       
