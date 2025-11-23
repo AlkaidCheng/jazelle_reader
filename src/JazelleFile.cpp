@@ -11,10 +11,8 @@
 #include <stdexcept>
 #include <algorithm>
 #include <iostream>
-#include <optional>
 #include <vector>
 #include <thread>
-
 
 namespace jazelle
 {
