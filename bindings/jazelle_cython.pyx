@@ -98,13 +98,6 @@ cdef object cpp_to_py_time(system_clock.time_point tp):
         return datetime.datetime.fromtimestamp(float(time_t_val))
     except (ValueError, OSError):
         return None
-
-cdef class EventBatchWrapper:
-    """Wraps a pointer to a C++ vector of events for dynamic passing."""
-    cdef vector[pxd.CppJazelleEvent]* ptr
-    
-    def __cinit__(self):
-        self.ptr = NULL
         
 # ==============================================================================
 # REGISTRY INFRASTRUCTURE
@@ -2928,8 +2921,9 @@ cdef class JazelleFile:
     
     def to_dict(
         self,
-        layout: Literal['columnar', 'jagged'] = 'columnar',
-        max_events: Optional[int] = None,
+        layout: str = 'columnar',
+        start_index: int = 0,
+        count: int = -1,
         batch_size: int = 1000,
         num_threads: Optional[int] = None
     ) -> Dict:
@@ -2948,8 +2942,11 @@ cdef class JazelleFile:
               Best for interactive analysis. 
               Returns a list of arrays (one per event).
             
-        max_events : int, optional
-            Maximum number of events to process (None for all)
+        start_index: int, default 0
+            Index of the first event to read.
+            
+        count: int, default -1
+            Number of events to read (-1 for all remaining).
             
         batch_size : int, default 1000
             Events per batch for parallel processing:
@@ -3004,18 +3001,24 @@ cdef class JazelleFile:
         """
         cdef int n_threads = self._resolve_num_threads(num_threads)
         cdef int total = self.getTotalEvents()
-        cdef int start = 0
-        cdef int count_to_read
-        cdef int total_processed = 0
+
+        if start_index < 0:
+            start_index = 0
+        if start_index >= total:
+            return {}
+            
+        cdef int end_index = total
+        if count >= 0:
+            end_index = min(total, start_index + count)
+            
+        cdef int current_start = start_index
+        cdef int chunk_count
 
         if layout not in ['columnar', 'jagged']:
             raise ValueError(
                 f"Invalid layout '{layout}'. Must be 'columnar' or 'jagged'."
             )
         
-        if max_events is not None:
-            total = min(total, max_events)
-
         accumulators = defaultdict(list)
         cdef std_map[string_view, BatchExtractor].iterator it
         cdef string_view bank_name
@@ -3023,12 +3026,11 @@ cdef class JazelleFile:
         cdef vector[pxd.CppJazelleEvent] cpp_batch
         cdef dict batch_data
 
-        cdef EventBatchWrapper batch_wrapper = EventBatchWrapper()
-        while start < total:
-            count_to_read = min(batch_size, total - start)
+        while current_start < end_index:
+            chunk_count = min(batch_size, end_index - current_start)
             
             # 1. Read C++ Batch (Parallel)
-            cpp_batch = self.cpp_obj.get().readEventsBatch(start, count_to_read, n_threads)
+            cpp_batch = self.cpp_obj.get().readEventsBatch(current_start, chunk_count, n_threads)
             
             if cpp_batch.empty(): break
 
@@ -3047,8 +3049,7 @@ cdef class JazelleFile:
                 
                 inc(it) # Next extractor
 
-            start += cpp_batch.size()
-            total_processed += cpp_batch.size()
+            current_start += cpp_batch.size()
             
             # Clear immediately to free memory
             cpp_batch.clear()
