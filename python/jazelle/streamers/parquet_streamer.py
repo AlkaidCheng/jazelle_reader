@@ -1,4 +1,4 @@
-from typing import Any, Union, Dict, Optional
+from typing import Any, Dict, Optional
 from .base import Streamer
 from ..utils import requires_packages
 

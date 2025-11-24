@@ -62,10 +62,10 @@ class HDF5Streamer(Streamer):
         import h5py
         
         if not isinstance(data, dict):
-             raise TypeError(
-                 "HDF5Streamer requires a dictionary (from `to_dict`). "
-                 "Awkward Arrays are not directly supported for this optimized layout."
-             )
+            raise TypeError(
+                "HDF5Streamer requires a dictionary (from `to_dict`). "
+                "Awkward Arrays are not directly supported for this optimized layout."
+            )
 
         with h5py.File(filename, "w") as f:
             

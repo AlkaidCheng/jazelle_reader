@@ -1,4 +1,4 @@
-from typing import Any, Union, Dict, Optional
+from typing import Any, Dict, Optional
 from .base import Streamer
 from ..utils import requires_packages
 
@@ -38,14 +38,14 @@ class FeatherStreamer(Streamer):
             The data to write (dict from ``to_dict`` or ``awkward.Array``).
         filename : str
             Path to the output file.
-		metadata : dict, optional
-			Metadata to attach to the array.
+        metadata : dict, optional
+            Metadata to attach to the array.
         **kwargs
             Additional arguments passed to ``awkward.to_feather`` 
             (e.g., ``compression="zstd"``).
         """
         import awkward as ak
-        ak_array = self._ensure_awkward(data, metadata)
+        ak_array = self._ensure_awkward(data, metadata=metadata)
         ak.to_feather(ak_array, filename, **kwargs)
 
 def from_feather(filename: str, **kwargs):

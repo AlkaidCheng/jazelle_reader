@@ -1,7 +1,6 @@
 import abc
 import os
 from typing import List, Any, Optional, Dict
-from ..utils import requires_packages
 
 # Global Registry: extension (str) -> Streamer Class
 _EXTENSION_REGISTRY = {}
