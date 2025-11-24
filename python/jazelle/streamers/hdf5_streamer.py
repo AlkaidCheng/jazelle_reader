@@ -14,18 +14,53 @@ class HDF5Streamer(Streamer):
 
     def read(self, filename: str, **kwargs) -> Any:
         """
-        Read an HDF5 file.
+        Read an HDF5 file (written by this streamer) into an Awkward Array.
 
         Parameters
         ----------
         filename : str
             Path to the input HDF5 file.
         **kwargs
-            Additional arguments passed to the reader.
+            Arguments passed to ``h5py.File``.
+
+        Returns
+        -------
+        awkward.Array
+            The reconstructed event data with metadata attached.
         """
-        raise NotImplementedError(
-            "Reading HDF5 files back into the Jazelle data structure is not yet implemented."
-        )
+        import h5py
+        from ..converters import dict_to_awkward
+
+        data_dict = {}
+        metadata = {}
+
+        with h5py.File(filename, "r", **kwargs) as f:
+            for k, v in f.attrs.items():
+                metadata[k] = v
+
+            # We look for the 'jazelle_events' group or use root if it contains families directly
+            root = f
+            if "jazelle_events" in f:
+                root = f["jazelle_events"]
+
+            for key in root.keys():
+                obj = root[key]
+                
+                # We expect Groups representing Families (e.g., "MCPART")
+                if isinstance(obj, h5py.Group):
+                    family_name = key
+                    family_data = {}
+
+                    for col_name in obj.keys():
+                        ds = obj[col_name]
+                        if isinstance(ds, h5py.Dataset):
+                            # Load into numpy array
+                            family_data[col_name] = ds[:]
+                    
+                    if family_data:
+                        data_dict[family_name] = family_data
+
+        return dict_to_awkward(data_dict, metadata=metadata)
 
     def dump(
         self, 
@@ -60,12 +95,21 @@ class HDF5Streamer(Streamer):
             If ``data`` is not a dictionary.
         """
         import h5py
+        import awkward as ak
         
-        if not isinstance(data, dict):
+        # Convert Awkward Array to Dict if necessary
+        if isinstance(data, ak.Array):
+            from ..converters import awkward_to_dict
+            data_dict, meta_from_arr = awkward_to_dict(data)
+            # Merge metadata, preferring explicit argument
+            if metadata is None:
+                metadata = meta_from_arr
+            data = data_dict
+        
+        elif not isinstance(data, dict):
             raise TypeError(
-                "HDF5Streamer requires a dictionary (from `to_dict`). "
-                "Awkward Arrays are not directly supported for this optimized layout."
-            )
+                 "HDF5Streamer requires a dictionary or awkward.Array."
+             )
 
         with h5py.File(filename, "w") as f:
             
