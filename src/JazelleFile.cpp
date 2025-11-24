@@ -562,7 +562,7 @@ namespace jazelle
                     int32_t local_idx = idx - start_idx;
                     if (local_idx >= 0 && local_idx < count) {
                         // Direct assignment without mutex (pre-allocated slots)
-                        events[local_idx] = event;
+                        events[local_idx] = std::move(event);
                         events_written.fetch_add(1, std::memory_order_relaxed);
                     }
                 } catch (...) {
