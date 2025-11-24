@@ -2843,7 +2843,7 @@ cdef class JazelleFile:
     
     def iterate(
         self,
-        batch_size: int = 1,
+        batch_size: int = 100,
         num_threads: Optional[int] = None
     ):
         """
