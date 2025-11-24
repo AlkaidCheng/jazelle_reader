@@ -3043,7 +3043,7 @@ cdef class JazelleFile:
                 # Store results (PyStr creation happens here)
                 py_name = (<bytes>bank_name).decode('utf-8')
                 for k, v in batch_data.items():
-                    accumulators[f"{py_name}_{k}"].append(v)
+                    accumulators[(py_name, k)].append(v)
                 
                 inc(it) # Next extractor
 
@@ -3059,8 +3059,7 @@ cdef class JazelleFile:
         cdef str key, fam, attr
         
         # Stitch chunks together
-        for key, arr_list in accumulators.items():
-            fam, attr = key.rsplit('_', 1)
+        for (fam, attr), arr_list in accumulators.items():
             
             # Determine if concatenation is needed
             if len(arr_list) == 1:
