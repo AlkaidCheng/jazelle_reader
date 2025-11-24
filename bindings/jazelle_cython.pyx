@@ -1,29 +1,28 @@
-# jazelle_reader/bindings/jazelle_cython.pyx
-# distutils: language = c++
-# distutils: define_macros=NPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION
-# cython: language_level=3
-
 """
-Jazelle Cython Bindings
-=======================
+Cython bindings for Jazelle Reader.
 
-This module provides high-performance Python bindings for the C++ Jazelle
-library. It utilizes direct NumPy memory access to maximize throughput
-when converting binary bank data into analysis-ready arrays.
+This module provides Python bindings for the C++ Jazelle Reader library,
+with support for efficient data extraction in multiple formats.
 """
 
+from typing import Dict, List, Optional, Union, Literal
+from collections import defaultdict
 import sys
 import inspect
 import cython
 import datetime
+from cython.operator cimport dereference as deref, preincrement as inc
 from libc.stdint cimport int16_t, int32_t
 from libc.string cimport memcpy
+from libc.stdint cimport uintptr_t
 from libcpp.string cimport string
 from libcpp.string_view cimport string_view
 from libcpp.memory cimport unique_ptr
+from libcpp.map cimport map as std_map
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 from libcpp.chrono cimport system_clock, to_time_t
+from libcpp.utility cimport move
 
 # --- NumPy Setup ---
 import numpy as np
@@ -35,10 +34,54 @@ cnp.import_array()
 # Import the .pxd definitions
 cimport jazelle_cython as pxd
 
+# ============================================================================
+# MODULE-LEVEL CONFIGURATION
+# ============================================================================
 
-# ==============================================================================
-# Helper Functions
-# ==============================================================================
+# Global default for number of threads (None means auto-detect)
+_default_num_threads = None
+
+def set_default_num_threads(num_threads: Optional[int]):
+    """
+    Set the global default number of threads for all JazelleFile operations.
+    
+    This setting affects all new JazelleFile instances unless overridden
+    in the constructor or method call.
+    
+    Parameters
+    ----------
+    num_threads : int or None
+        Default number of threads to use for parallel operations.
+        - If None or 0: Auto-detect based on available cores
+        - If > 0: Use specified number of threads
+        - If < 0: Disable parallel processing (single-threaded)
+    
+    Examples
+    --------
+    >>> import jazelle
+    >>> jazelle.set_default_num_threads(8)  # Use 8 threads globally
+    >>> 
+    >>> with jazelle.JazelleFile('data.jazelle') as f:
+    ...     # Will use 8 threads unless overridden
+    ...     data = f.to_dict()
+    """
+    global _default_num_threads
+    _default_num_threads = num_threads
+
+def get_default_num_threads() -> Optional[int]:
+    """
+    Get the current global default number of threads.
+    
+    Returns
+    -------
+    int or None
+        Current default number of threads, or None if auto-detect.
+    """
+    return _default_num_threads
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 
 cdef object cpp_to_py_time(system_clock.time_point tp):
     """
@@ -56,17 +99,34 @@ cdef object cpp_to_py_time(system_clock.time_point tp):
     except (ValueError, OSError):
         return None
 
+cdef class EventBatchWrapper:
+    """Wraps a pointer to a C++ vector of events for dynamic passing."""
+    cdef vector[pxd.CppJazelleEvent]* ptr
+    
+    def __cinit__(self):
+        self.ptr = NULL
+        
+# ==============================================================================
+# REGISTRY INFRASTRUCTURE
+# ==============================================================================
 
+# Define a C-function pointer type for our extractors
+ctypedef dict (*BatchExtractor)(vector[pxd.CppJazelleEvent]*)
+
+# A global C++ map to hold the registry
+cdef std_map[string_view, BatchExtractor] _batch_extractors
+
+# Helper to register functions (clean syntax)
+cdef void register_extractor(string_view name, BatchExtractor func):
+    _batch_extractors[name] = func
+        
 # ==============================================================================
 # Internal Wrapper Utilities
 # ==============================================================================
 
 cdef class Family:
     """
-    Wraps a C++ Family template, providing list-like access to Banks.
-
-    This class acts as a container for all banks of a specific type within
-    a single event.
+    Wrapper for a family of banks (variable-length collection).
     """
     cdef pxd.CppIFamily* _ptr
     cdef JazelleEvent _event_ref
@@ -120,24 +180,40 @@ cdef class Family:
 
     cpdef object to_dict(self, str orient='list'):
         """
-        Converts the family data to a Python dictionary.
-
-        Args:
-            orient (str):
-                'list' (default): Returns column-oriented data (optimized with NumPy).
-                                  Format: { 'col_name': np.array([...]) }
-                'records': Returns row-oriented data (list of dicts).
-                           Format: [ {'col': val}, ... ]
+        Convert family data to dictionary.
+        
+        Parameters
+        ----------
+        orient : {'list', 'records'}, default 'list'
+            Data orientation:
+            
+            - 'list' : columnar {attr: np.array([...])}
+            - 'records' : row-based [{attr: val, ...}, ...]
+            
+        Returns
+        -------
+        dict or list
+            Family data in requested format.
+            
         """
         if orient == 'records':
             return self._to_dict_records()
         elif orient == 'list':
             return self._to_dict_list()
         else:
-            raise ValueError(f"Invalid orient '{orient}'. Must be 'records' or 'list'.")
+            raise ValueError(
+                f"Invalid orient '{orient}'. Must be 'records' or 'list'."
+            )
 
     cdef list _to_dict_records(self):
-        """Row-based conversion using Flyweight optimization."""
+        """
+        Row-based conversion using Flyweight optimization.
+        
+        Returns
+        -------
+        list of dict
+            Each element is a dictionary representing one bank.
+        """
         cdef list result = []
         cdef size_t size = self._ptr.size()
         
@@ -146,7 +222,8 @@ cdef class Family:
             
         cdef size_t i
         cdef pxd.CppBank* raw_ptr
-        # Allocate one Python wrapper to reuse (flyweight)
+        
+        # Allocate one Python wrapper to reuse (flyweight pattern)
         cdef Bank flyweight = self._wrapper_class.__new__(self._wrapper_class)
         flyweight._ptr = NULL
         flyweight._event_ref = self._event_ref
@@ -162,10 +239,16 @@ cdef class Family:
     cdef dict _to_dict_list(self):
         """
         High-performance columnar conversion.
-        Delegates to the specific Bank's static NumPy extractor.
+        
+        Delegates to the specific Bank's static NumPy extractor
+        for optimal performance.
+        
+        Returns
+        -------
+        dict
+            Dictionary mapping attribute names to numpy arrays.
         """
         return self._wrapper_class.bulk_extract(self)
-
 
 cdef object wrap_family(pxd.CppIFamily* ptr, JazelleEvent event, type py_class):
     cdef Family obj = Family.__new__(Family)
@@ -210,6 +293,14 @@ cdef class Bank:
         Must be implemented by subclasses.
         """
         raise NotImplementedError("bulk_extract not implemented")
+
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        """
+        Extract data directly from C++ vector into NumPy arrays.
+        To be implemented by concrete subclasses.
+        """
+        raise NotImplementedError()        
 
 
 cdef object wrap_bank(pxd.CppBank* ptr, JazelleEvent event, type py_class):
@@ -298,7 +389,6 @@ cdef class CRIDHYP:
         else:
             data['llik'] = None
         return data
-
 
 cdef object wrap_pidvec(pxd.CppPIDVEC* ptr, JazelleEvent event):
     cdef PIDVEC py_obj = <PIDVEC>PIDVEC.__new__(PIDVEC)
@@ -391,6 +481,57 @@ cdef class IEVENTH(Bank):
             'weight': arr_weight, 'evttime': l_evttime
         }
 
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        # Allocations
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_header = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_run = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_event = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] r_time = np.empty(count, dtype=np.int64)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_weight = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_evttype = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_trigger = np.empty(count, dtype=np.int32)
+
+        # Pointers
+        cdef int32_t* p_id = <int32_t*>r_id.data
+        cdef int32_t* p_header = <int32_t*>r_header.data
+        cdef int32_t* p_run = <int32_t*>r_run.data
+        cdef int32_t* p_event = <int32_t*>r_event.data
+        cdef int64_t* p_time = <int64_t*>r_time.data
+        cdef float* p_weight = <float*>r_weight.data
+        cdef int32_t* p_evttype = <int32_t*>r_evttype.data
+        cdef int32_t* p_trigger = <int32_t*>r_trigger.data
+
+        cdef size_t i
+        cdef pxd.CppIEVENTH* ptr
+        
+        for i in range(count):
+            ptr = &batch.at(i).ieventh
+            p_id[i] = ptr.getId()
+            p_header[i] = ptr.header
+            p_run[i] = ptr.run
+            p_event[i] = ptr.event
+            p_time[i] = to_time_t(ptr.evttime)
+            p_weight[i] = ptr.weight
+            p_evttype[i] = ptr.evttype
+            p_trigger[i] = ptr.trigger
+
+        # Return in C++ read order: header, run, event, time, weight, evttype, trigger
+        return {
+            'id': r_id, 
+            'header': r_header, 
+            'run': r_run, 
+            'event': r_event,
+            'evttime': r_time, 
+            'weight': r_weight, 
+            'evttype': r_evttype,
+            'trigger': r_trigger
+        }
+
 
 cdef class MCHEAD(Bank):
     """Wrapper for MCHEAD (Monte Carlo Header) Bank."""
@@ -451,6 +592,61 @@ cdef class MCHEAD(Bank):
         return {
             'id': arr_id, 'ntot': arr_ntot, 'origin': arr_origin,
             'ipx': arr_ipx, 'ipy': arr_ipy, 'ipz': arr_ipz
+        }
+
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppMCHEAD]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        # Allocations
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_ntot = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_origin = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_ipx = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_ipy = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_ipz = np.empty(total, dtype=np.float32)
+
+        cdef int32_t* p_id = <int32_t*>r_id.data
+        cdef int32_t* p_ntot = <int32_t*>r_ntot.data
+        cdef int32_t* p_origin = <int32_t*>r_origin.data
+        cdef float* p_ipx = <float*>r_ipx.data
+        cdef float* p_ipy = <float*>r_ipy.data
+        cdef float* p_ipz = <float*>r_ipz.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppMCHEAD]* fam
+        cdef pxd.CppMCHEAD* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppMCHEAD]()
+            for j in range(fam.size()):
+                b = <pxd.CppMCHEAD*>fam.at(j)
+                p_id[g_idx] = b.getId()
+                p_ntot[g_idx] = b.ntot
+                p_origin[g_idx] = b.origin
+                p_ipx[g_idx] = b.ipx
+                p_ipy[g_idx] = b.ipy
+                p_ipz[g_idx] = b.ipz
+                g_idx += 1
+
+        return {
+            '_offsets': arr_offsets, 
+            'id': r_id, 
+            'ntot': r_ntot, 
+            'origin': r_origin, 
+            'ipx': r_ipx, 
+            'ipy': r_ipy, 
+            'ipz': r_ipz
         }
 
 
@@ -544,6 +740,73 @@ cdef class MCPART(Bank):
             'p': arr_p, 'xt': arr_xt
         }
 
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppMCPART]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        # Allocations
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_p = np.empty((total, 3), dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_e = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_ptot = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_ptype = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_charge = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_origin = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_xt = np.empty((total, 3), dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_parent_id = np.empty(total, dtype=np.int32)
+
+        cdef int32_t* p_id = <int32_t*>r_id.data
+        cdef float* p_p = <float*>r_p.data
+        cdef float* p_e = <float*>r_e.data
+        cdef float* p_ptot = <float*>r_ptot.data
+        cdef int32_t* p_ptype = <int32_t*>r_ptype.data
+        cdef float* p_charge = <float*>r_charge.data
+        cdef int32_t* p_origin = <int32_t*>r_origin.data
+        cdef float* p_xt = <float*>r_xt.data
+        cdef int32_t* p_parent_id = <int32_t*>r_parent_id.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppMCPART]* fam
+        cdef pxd.CppMCPART* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppMCPART]()
+            for j in range(fam.size()):
+                b = <pxd.CppMCPART*>fam.at(j)
+                p_id[g_idx] = b.getId()
+                memcpy(p_p + (g_idx*3), &b.p[0], 12)
+                p_e[g_idx] = b.e
+                p_ptot[g_idx] = b.ptot
+                p_ptype[g_idx] = b.ptype
+                p_charge[g_idx] = b.charge
+                p_origin[g_idx] = b.origin
+                memcpy(p_xt + (g_idx*3), &b.xt[0], 12)
+                p_parent_id[g_idx] = b.parent_id
+                g_idx += 1
+
+        return {
+            '_offsets': arr_offsets, 
+            'id': r_id, 
+            'p': r_p, 
+            'e': r_e, 
+            'ptot': r_ptot, 
+            'ptype': r_ptype, 
+            'charge': r_charge, 
+            'origin': r_origin, 
+            'xt': r_xt, 
+            'parent_id': r_parent_id
+        }
+
 
 cdef class PHPSUM(Bank):
     """Wrapper for PHPSUM (Physics Particle Summary) Bank."""
@@ -627,6 +890,71 @@ cdef class PHPSUM(Bank):
             'id': arr_id, 'px': arr_px, 'py': arr_py, 'pz': arr_pz,
             'x': arr_x, 'y': arr_y, 'z': arr_z, 'charge': arr_charge,
             'status': arr_status, 'ptot': arr_ptot
+        }
+
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppPHPSUM]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        # Allocations
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_px = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_py = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_pz = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_x = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_y = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_z = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_charge = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_status = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float64_t, ndim=1] r_ptot = np.empty(total, dtype=np.float64)
+
+        cdef int32_t* p_id = <int32_t*>r_id.data
+        cdef float* p_px = <float*>r_px.data
+        cdef float* p_py = <float*>r_py.data
+        cdef float* p_pz = <float*>r_pz.data
+        cdef float* p_x = <float*>r_x.data
+        cdef float* p_y = <float*>r_y.data
+        cdef float* p_z = <float*>r_z.data
+        cdef float* p_charge = <float*>r_charge.data
+        cdef int32_t* p_status = <int32_t*>r_status.data
+        cdef double* p_ptot = <double*>r_ptot.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppPHPSUM]* fam
+        cdef pxd.CppPHPSUM* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppPHPSUM]()
+            for j in range(fam.size()):
+                b = <pxd.CppPHPSUM*>fam.at(j)
+                p_id[g_idx] = b.getId()
+                p_px[g_idx] = b.px
+                p_py[g_idx] = b.py
+                p_pz[g_idx] = b.pz
+                p_x[g_idx] = b.x
+                p_y[g_idx] = b.y
+                p_z[g_idx] = b.z
+                p_charge[g_idx] = b.charge
+                p_status[g_idx] = b.status
+                p_ptot[g_idx] = b.getPTot()
+                g_idx += 1
+
+        return {
+            '_offsets': arr_offsets, 'id': r_id, 
+            'px': r_px, 'py': r_py, 'pz': r_pz, 
+            'x': r_x, 'y': r_y, 'z': r_z,
+            'charge': r_charge, 'status': r_status, 
+            'ptot': r_ptot
         }
 
 
@@ -833,6 +1161,132 @@ cdef class PHCHRG(Bank):
             'dhlxpar': arr_dhlxpar, 'tkpar': arr_tkpar, 'dtkpar': arr_dtkpar
         }
 
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppPHCHRG]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        # Allocations
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_hlxpar = np.empty((total, 6), dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_dhlxpar = np.empty((total, 15), dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_bnorm = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_impact = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_b3norm = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_impact3 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_charge = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_smwstat = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_status = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_tkpar0 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_tkpar = np.empty((total, 5), dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_dtkpar = np.empty((total, 15), dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_length = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_chi2dt = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_imc = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_ndfdt = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nhit = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nhite = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nhitp = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nmisht = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nwrght = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nhitv = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_chi2 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_chi2v = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_vxdhit = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_mustat = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_estat = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_dedx = np.empty(total, dtype=np.int32)
+
+        cdef int32_t* p_id = <int32_t*>r_id.data
+        cdef float* p_hlxpar = <float*>r_hlxpar.data
+        cdef float* p_dhlxpar = <float*>r_dhlxpar.data
+        cdef float* p_bnorm = <float*>r_bnorm.data
+        cdef float* p_impact = <float*>r_impact.data
+        cdef float* p_b3norm = <float*>r_b3norm.data
+        cdef float* p_impact3 = <float*>r_impact3.data
+        cdef int16_t* p_charge = <int16_t*>r_charge.data
+        cdef int16_t* p_smwstat = <int16_t*>r_smwstat.data
+        cdef int32_t* p_status = <int32_t*>r_status.data
+        cdef float* p_tkpar0 = <float*>r_tkpar0.data
+        cdef float* p_tkpar = <float*>r_tkpar.data
+        cdef float* p_dtkpar = <float*>r_dtkpar.data
+        cdef float* p_length = <float*>r_length.data
+        cdef float* p_chi2dt = <float*>r_chi2dt.data
+        cdef int16_t* p_imc = <int16_t*>r_imc.data
+        cdef int16_t* p_ndfdt = <int16_t*>r_ndfdt.data
+        cdef int16_t* p_nhit = <int16_t*>r_nhit.data
+        cdef int16_t* p_nhite = <int16_t*>r_nhite.data
+        cdef int16_t* p_nhitp = <int16_t*>r_nhitp.data
+        cdef int16_t* p_nmisht = <int16_t*>r_nmisht.data
+        cdef int16_t* p_nwrght = <int16_t*>r_nwrght.data
+        cdef int16_t* p_nhitv = <int16_t*>r_nhitv.data
+        cdef float* p_chi2 = <float*>r_chi2.data
+        cdef float* p_chi2v = <float*>r_chi2v.data
+        cdef int32_t* p_vxdhit = <int32_t*>r_vxdhit.data
+        cdef int16_t* p_mustat = <int16_t*>r_mustat.data
+        cdef int16_t* p_estat = <int16_t*>r_estat.data
+        cdef int32_t* p_dedx = <int32_t*>r_dedx.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppPHCHRG]* fam
+        cdef pxd.CppPHCHRG* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppPHCHRG]()
+            for j in range(fam.size()):
+                b = <pxd.CppPHCHRG*>fam.at(j)
+                p_id[g_idx] = b.getId()
+                memcpy(p_hlxpar + (g_idx*6), &b.hlxpar[0], 24)
+                memcpy(p_dhlxpar + (g_idx*15), &b.dhlxpar[0], 60)
+                p_bnorm[g_idx] = b.bnorm
+                p_impact[g_idx] = b.impact
+                p_b3norm[g_idx] = b.b3norm
+                p_impact3[g_idx] = b.impact3
+                p_charge[g_idx] = b.charge
+                p_smwstat[g_idx] = b.smwstat
+                p_status[g_idx] = b.status
+                p_tkpar0[g_idx] = b.tkpar0
+                memcpy(p_tkpar + (g_idx*5), &b.tkpar[0], 20)
+                memcpy(p_dtkpar + (g_idx*15), &b.dtkpar[0], 60)
+                p_length[g_idx] = b.length
+                p_chi2dt[g_idx] = b.chi2dt
+                p_imc[g_idx] = b.imc
+                p_ndfdt[g_idx] = b.ndfdt
+                p_nhit[g_idx] = b.nhit
+                p_nhite[g_idx] = b.nhite
+                p_nhitp[g_idx] = b.nhitp
+                p_nmisht[g_idx] = b.nmisht
+                p_nwrght[g_idx] = b.nwrght
+                p_nhitv[g_idx] = b.nhitv
+                p_chi2[g_idx] = b.chi2
+                p_chi2v[g_idx] = b.chi2v
+                p_vxdhit[g_idx] = b.vxdhit
+                p_mustat[g_idx] = b.mustat
+                p_estat[g_idx] = b.estat
+                p_dedx[g_idx] = b.dedx
+                g_idx += 1
+
+        return {
+            '_offsets': arr_offsets, 'id': r_id, 
+            'hlxpar': r_hlxpar, 'dhlxpar': r_dhlxpar,
+            'bnorm': r_bnorm, 'impact': r_impact, 'b3norm': r_b3norm, 'impact3': r_impact3,
+            'charge': r_charge, 'smwstat': r_smwstat, 'status': r_status, 
+            'tkpar0': r_tkpar0, 'tkpar': r_tkpar, 'dtkpar': r_dtkpar, 
+            'length': r_length, 'chi2dt': r_chi2dt,
+            'imc': r_imc, 'ndfdt': r_ndfdt, 'nhit': r_nhit, 'nhite': r_nhite, 
+            'nhitp': r_nhitp, 'nmisht': r_nmisht, 'nwrght': r_nwrght, 'nhitv': r_nhitv, 
+            'chi2': r_chi2, 'chi2v': r_chi2v, 'vxdhit': r_vxdhit, 
+            'mustat': r_mustat, 'estat': r_estat, 'dedx': r_dedx
+        }
 
 cdef class PHKLUS(Bank):
     """Wrapper for PHKLUS (Calorimeter Cluster) Bank."""
@@ -968,6 +1422,95 @@ cdef class PHKLUS(Bank):
             'elayer': arr_elayer
         }
 
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppPHKLUS]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        # Allocations
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_status = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_eraw = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_cth = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_wcth = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_phi = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_wphi = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_elayer = np.empty((total, 8), dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_nhit2 = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_cth2 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_wcth2 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_phi2 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_whphi2 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_nhit3 = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_cth3 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_wcth3 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_phi3 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_wphi3 = np.empty(total, dtype=np.float32)
+
+        cdef int32_t* p_id = <int32_t*>r_id.data
+        cdef int32_t* p_status = <int32_t*>r_status.data
+        cdef float* p_eraw = <float*>r_eraw.data
+        cdef float* p_cth = <float*>r_cth.data
+        cdef float* p_wcth = <float*>r_wcth.data
+        cdef float* p_phi = <float*>r_phi.data
+        cdef float* p_wphi = <float*>r_wphi.data
+        cdef float* p_elayer = <float*>r_elayer.data
+        cdef int32_t* p_nhit2 = <int32_t*>r_nhit2.data
+        cdef float* p_cth2 = <float*>r_cth2.data
+        cdef float* p_wcth2 = <float*>r_wcth2.data
+        cdef float* p_phi2 = <float*>r_phi2.data
+        cdef float* p_whphi2 = <float*>r_whphi2.data
+        cdef int32_t* p_nhit3 = <int32_t*>r_nhit3.data
+        cdef float* p_cth3 = <float*>r_cth3.data
+        cdef float* p_wcth3 = <float*>r_wcth3.data
+        cdef float* p_phi3 = <float*>r_phi3.data
+        cdef float* p_wphi3 = <float*>r_wphi3.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppPHKLUS]* fam
+        cdef pxd.CppPHKLUS* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppPHKLUS]()
+            for j in range(fam.size()):
+                b = <pxd.CppPHKLUS*>fam.at(j)
+                p_id[g_idx] = b.getId()
+                p_status[g_idx] = b.status
+                p_eraw[g_idx] = b.eraw
+                p_cth[g_idx] = b.cth
+                p_wcth[g_idx] = b.wcth
+                p_phi[g_idx] = b.phi
+                p_wphi[g_idx] = b.wphi
+                memcpy(p_elayer + (g_idx*8), &b.elayer[0], 32)
+                p_nhit2[g_idx] = b.nhit2
+                p_cth2[g_idx] = b.cth2
+                p_wcth2[g_idx] = b.wcth2
+                p_phi2[g_idx] = b.phi2
+                p_whphi2[g_idx] = b.whphi2
+                p_nhit3[g_idx] = b.nhit3
+                p_cth3[g_idx] = b.cth3
+                p_wcth3[g_idx] = b.wcth3
+                p_phi3[g_idx] = b.phi3
+                p_wphi3[g_idx] = b.wphi3
+                g_idx += 1
+
+        # Order matches src/banks/PHKLUS.cpp read()
+        return {
+            '_offsets': arr_offsets, 'id': r_id, 'status': r_status, 
+            'eraw': r_eraw, 'cth': r_cth, 'wcth': r_wcth, 'phi': r_phi, 'wphi': r_wphi,
+            'elayer': r_elayer, 
+            'nhit2': r_nhit2, 'cth2': r_cth2, 'wcth2': r_wcth2, 'phi2': r_phi2, 'whphi2': r_whphi2, 
+            'nhit3': r_nhit3, 'cth3': r_cth3, 'wcth3': r_wcth3, 'phi3': r_phi3, 'wphi3': r_wphi3
+        }
 
 cdef class PHWIC(Bank):
     """Wrapper for PHWIC (Warm Iron Calorimeter) Bank."""
@@ -1165,6 +1708,128 @@ cdef class PHWIC(Bank):
             'pref1': arr_pref1, 'pfit': arr_pfit, 'dpfit': arr_dpfit
         }
 
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppPHWIC]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        # Allocations
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_idstat = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nhit = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nhit45 = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_npat = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nhitpat = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_syshit = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_qpinit = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_t1 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_t2 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_t3 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_hitmiss = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_itrlen = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nlayexp = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nlaybey = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_missprob = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_phwicid = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nhitshar = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nother = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_hitsused = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_pref1 = np.empty((total, 3), dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_pfit = np.empty((total, 4), dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_dpfit = np.empty((total, 10), dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_chi2 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_ndf = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_punfit = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_matchChi2 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_matchNdf = np.empty(total, dtype=np.int16)
+
+        cdef int32_t* p_id = <int32_t*>r_id.data
+        cdef int16_t* p_idstat = <int16_t*>r_idstat.data
+        cdef int16_t* p_nhit = <int16_t*>r_nhit.data
+        cdef int16_t* p_nhit45 = <int16_t*>r_nhit45.data
+        cdef int16_t* p_npat = <int16_t*>r_npat.data
+        cdef int16_t* p_nhitpat = <int16_t*>r_nhitpat.data
+        cdef int16_t* p_syshit = <int16_t*>r_syshit.data
+        cdef float* p_qpinit = <float*>r_qpinit.data
+        cdef float* p_t1 = <float*>r_t1.data
+        cdef float* p_t2 = <float*>r_t2.data
+        cdef float* p_t3 = <float*>r_t3.data
+        cdef int32_t* p_hitmiss = <int32_t*>r_hitmiss.data
+        cdef float* p_itrlen = <float*>r_itrlen.data
+        cdef int16_t* p_nlayexp = <int16_t*>r_nlayexp.data
+        cdef int16_t* p_nlaybey = <int16_t*>r_nlaybey.data
+        cdef float* p_missprob = <float*>r_missprob.data
+        cdef int32_t* p_phwicid = <int32_t*>r_phwicid.data
+        cdef int16_t* p_nhitshar = <int16_t*>r_nhitshar.data
+        cdef int16_t* p_nother = <int16_t*>r_nother.data
+        cdef int32_t* p_hitsused = <int32_t*>r_hitsused.data
+        cdef float* p_pref1 = <float*>r_pref1.data
+        cdef float* p_pfit = <float*>r_pfit.data
+        cdef float* p_dpfit = <float*>r_dpfit.data
+        cdef float* p_chi2 = <float*>r_chi2.data
+        cdef int16_t* p_ndf = <int16_t*>r_ndf.data
+        cdef int16_t* p_punfit = <int16_t*>r_punfit.data
+        cdef float* p_matchChi2 = <float*>r_matchChi2.data
+        cdef int16_t* p_matchNdf = <int16_t*>r_matchNdf.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppPHWIC]* fam
+        cdef pxd.CppPHWIC* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppPHWIC]()
+            for j in range(fam.size()):
+                b = <pxd.CppPHWIC*>fam.at(j)
+                p_id[g_idx] = b.getId()
+                p_idstat[g_idx] = b.idstat
+                p_nhit[g_idx] = b.nhit
+                p_nhit45[g_idx] = b.nhit45
+                p_npat[g_idx] = b.npat
+                p_nhitpat[g_idx] = b.nhitpat
+                p_syshit[g_idx] = b.syshit
+                p_qpinit[g_idx] = b.qpinit
+                p_t1[g_idx] = b.t1
+                p_t2[g_idx] = b.t2
+                p_t3[g_idx] = b.t3
+                p_hitmiss[g_idx] = b.hitmiss
+                p_itrlen[g_idx] = b.itrlen
+                p_nlayexp[g_idx] = b.nlayexp
+                p_nlaybey[g_idx] = b.nlaybey
+                p_missprob[g_idx] = b.missprob
+                p_phwicid[g_idx] = b.phwicid
+                p_nhitshar[g_idx] = b.nhitshar
+                p_nother[g_idx] = b.nother
+                p_hitsused[g_idx] = b.hitsused
+                memcpy(p_pref1 + (g_idx*3), &b.pref1[0], 12)
+                memcpy(p_pfit + (g_idx*4), &b.pfit[0], 16)
+                memcpy(p_dpfit + (g_idx*10), &b.dpfit[0], 40)
+                p_chi2[g_idx] = b.chi2
+                p_ndf[g_idx] = b.ndf
+                p_punfit[g_idx] = b.punfit
+                p_matchChi2[g_idx] = b.matchChi2
+                p_matchNdf[g_idx] = b.matchNdf
+                g_idx += 1
+                
+        return {
+            '_offsets': arr_offsets, 'id': r_id, 
+            'idstat': r_idstat, 'nhit': r_nhit, 'nhit45': r_nhit45, 'npat': r_npat, 
+            'nhitpat': r_nhitpat, 'syshit': r_syshit, 
+            'qpinit': r_qpinit, 't1': r_t1, 't2': r_t2, 't3': r_t3, 'hitmiss': r_hitmiss,
+            'itrlen': r_itrlen, 'nlayexp': r_nlayexp, 'nlaybey': r_nlaybey, 'missprob': r_missprob,
+            'phwicid': r_phwicid, 'nhitshar': r_nhitshar, 'nother': r_nother, 'hitsused': r_hitsused,
+            'pref1': r_pref1, 'pfit': r_pfit, 'dpfit': r_dpfit, 
+            'chi2': r_chi2, 'ndf': r_ndf, 'punfit': r_punfit, 
+            'matchChi2': r_matchChi2, 'matchNdf': r_matchNdf
+        }
 
 cdef class PHCRID(Bank):
     """Wrapper for PHCRID (Cerenkov Ring Imaging) Bank."""
@@ -1253,6 +1918,141 @@ cdef class PHCRID(Bank):
             'liq': l_liq, 'gas': l_gas, 'llik': l_llik
         }
 
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppPHCRID]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        # Allocations
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_ctlword = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_norm = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_rc = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_geom = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_trkp = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_nhits = np.empty(total, dtype=np.int16)
+        
+        # Flattened LIQ
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_liq_rc = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_liq_nhits = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_liq_besthyp = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_liq_nhexp = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_liq_nhfnd = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_liq_nhbkg = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_liq_mskphot = np.empty(total, dtype=np.int16)
+        
+        # Flattened GAS
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_gas_rc = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_gas_nhits = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_gas_besthyp = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_gas_nhexp = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_gas_nhfnd = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_gas_nhbkg = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_gas_mskphot = np.empty(total, dtype=np.int16)
+
+        # Flattened LLIK
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_llik_e = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_llik_mu = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_llik_pi = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_llik_k = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_llik_p = np.empty(total, dtype=np.float32)
+
+        # Pointers
+        cdef int32_t* p_id = <int32_t*>r_id.data
+        cdef int32_t* p_ctlword = <int32_t*>r_ctlword.data
+        cdef float* p_norm = <float*>r_norm.data
+        cdef int16_t* p_rc = <int16_t*>r_rc.data
+        cdef int16_t* p_geom = <int16_t*>r_geom.data
+        cdef int16_t* p_trkp = <int16_t*>r_trkp.data
+        cdef int16_t* p_nhits = <int16_t*>r_nhits.data
+        
+        cdef int16_t* p_liq_rc = <int16_t*>r_liq_rc.data
+        cdef int16_t* p_liq_nhits = <int16_t*>r_liq_nhits.data
+        cdef int32_t* p_liq_besthyp = <int32_t*>r_liq_besthyp.data
+        cdef int16_t* p_liq_nhexp = <int16_t*>r_liq_nhexp.data
+        cdef int16_t* p_liq_nhfnd = <int16_t*>r_liq_nhfnd.data
+        cdef int16_t* p_liq_nhbkg = <int16_t*>r_liq_nhbkg.data
+        cdef int16_t* p_liq_mskphot = <int16_t*>r_liq_mskphot.data
+
+        cdef int16_t* p_gas_rc = <int16_t*>r_gas_rc.data
+        cdef int16_t* p_gas_nhits = <int16_t*>r_gas_nhits.data
+        cdef int32_t* p_gas_besthyp = <int32_t*>r_gas_besthyp.data
+        cdef int16_t* p_gas_nhexp = <int16_t*>r_gas_nhexp.data
+        cdef int16_t* p_gas_nhfnd = <int16_t*>r_gas_nhfnd.data
+        cdef int16_t* p_gas_nhbkg = <int16_t*>r_gas_nhbkg.data
+        cdef int16_t* p_gas_mskphot = <int16_t*>r_gas_mskphot.data
+
+        cdef float* p_llik_e = <float*>r_llik_e.data
+        cdef float* p_llik_mu = <float*>r_llik_mu.data
+        cdef float* p_llik_pi = <float*>r_llik_pi.data
+        cdef float* p_llik_k = <float*>r_llik_k.data
+        cdef float* p_llik_p = <float*>r_llik_p.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppPHCRID]* fam
+        cdef pxd.CppPHCRID* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppPHCRID]()
+            for j in range(fam.size()):
+                b = <pxd.CppPHCRID*>fam.at(j)
+                p_id[g_idx] = b.getId()
+                p_ctlword[g_idx] = b.ctlword
+                p_norm[g_idx] = b.norm
+                p_rc[g_idx] = b.rc
+                p_geom[g_idx] = b.geom
+                p_trkp[g_idx] = b.trkp
+                p_nhits[g_idx] = b.nhits
+                
+                # LIQ
+                p_liq_rc[g_idx] = b.liq.rc
+                p_liq_nhits[g_idx] = b.liq.nhits
+                p_liq_besthyp[g_idx] = b.liq.besthyp
+                p_liq_nhexp[g_idx] = b.liq.nhexp
+                p_liq_nhfnd[g_idx] = b.liq.nhfnd
+                p_liq_nhbkg[g_idx] = b.liq.nhbkg
+                p_liq_mskphot[g_idx] = b.liq.mskphot
+                
+                # GAS
+                p_gas_rc[g_idx] = b.gas.rc
+                p_gas_nhits[g_idx] = b.gas.nhits
+                p_gas_besthyp[g_idx] = b.gas.besthyp
+                p_gas_nhexp[g_idx] = b.gas.nhexp
+                p_gas_nhfnd[g_idx] = b.gas.nhfnd
+                p_gas_nhbkg[g_idx] = b.gas.nhbkg
+                p_gas_mskphot[g_idx] = b.gas.mskphot
+                
+                # LLIK
+                p_llik_e[g_idx] = b.llik.e
+                p_llik_mu[g_idx] = b.llik.mu
+                p_llik_pi[g_idx] = b.llik.pi
+                p_llik_k[g_idx] = b.llik.k
+                p_llik_p[g_idx] = b.llik.p
+                
+                g_idx += 1
+
+        return {
+            '_offsets': arr_offsets, 'id': r_id, 'ctlword': r_ctlword, 'norm': r_norm,
+            'rc': r_rc, 'geom': r_geom, 'trkp': r_trkp, 'nhits': r_nhits,
+            'liq_rc': r_liq_rc, 'liq_nhits': r_liq_nhits, 'liq_besthyp': r_liq_besthyp,
+            'liq_nhexp': r_liq_nhexp, 'liq_nhfnd': r_liq_nhfnd, 'liq_nhbkg': r_liq_nhbkg,
+            'liq_mskphot': r_liq_mskphot,
+            'gas_rc': r_gas_rc, 'gas_nhits': r_gas_nhits, 'gas_besthyp': r_gas_besthyp,
+            'gas_nhexp': r_gas_nhexp, 'gas_nhfnd': r_gas_nhfnd, 'gas_nhbkg': r_gas_nhbkg,
+            'gas_mskphot': r_gas_mskphot,
+            'llik_e': r_llik_e, 'llik_mu': r_llik_mu, 'llik_pi': r_llik_pi,
+            'llik_k': r_llik_k, 'llik_p': r_llik_p
+        }
+
 
 cdef class PHKTRK(Bank):
     """Wrapper for PHKTRK (Stub) Bank."""
@@ -1272,6 +2072,36 @@ cdef class PHKTRK(Bank):
         for i in range(count):
              r_id[i] = (<pxd.CppPHKTRK*>family._ptr.at(i)).getId()
         return {'id': arr_id}
+
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppPHKTRK]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(total, dtype=np.int32)
+        cdef int32_t* p_id = <int32_t*>r_id.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppPHKTRK]* fam
+        cdef pxd.CppPHKTRK* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppPHKTRK]()
+            for j in range(fam.size()):
+                b = <pxd.CppPHKTRK*>fam.at(j)
+                p_id[g_idx] = b.getId()
+                g_idx += 1
+
+        return {'_offsets': arr_offsets, 'id': r_id}
 
 
 cdef class PHKELID(Bank):
@@ -1459,6 +2289,126 @@ cdef class PHKELID(Bank):
             'em3x3a': arr_em3x3a, 'em3x3b': arr_em3x3b
         }
 
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppPHKELID]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        # Allocations
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_phchrg_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_idstat = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=1] r_prob = np.empty(total, dtype=np.int16)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_phi = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_theta = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_qp = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_dphi = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_dtheta = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_dqp = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_tphi = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_ttheta = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_isolat = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_em1 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_em12 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_dem12 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_had1 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_emphi = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_emtheta = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_phiwid = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_thewid = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_em1x1 = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_em2x2a = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_em2x2b = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_em3x3a = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_em3x3b = np.empty(total, dtype=np.float32)
+
+        cdef int32_t* p_id = <int32_t*>r_id.data
+        cdef int32_t* p_phchrg_id = <int32_t*>r_phchrg_id.data
+        cdef int16_t* p_idstat = <int16_t*>r_idstat.data
+        cdef int16_t* p_prob = <int16_t*>r_prob.data
+        cdef float* p_phi = <float*>r_phi.data
+        cdef float* p_theta = <float*>r_theta.data
+        cdef float* p_qp = <float*>r_qp.data
+        cdef float* p_dphi = <float*>r_dphi.data
+        cdef float* p_dtheta = <float*>r_dtheta.data
+        cdef float* p_dqp = <float*>r_dqp.data
+        cdef float* p_tphi = <float*>r_tphi.data
+        cdef float* p_ttheta = <float*>r_ttheta.data
+        cdef float* p_isolat = <float*>r_isolat.data
+        cdef float* p_em1 = <float*>r_em1.data
+        cdef float* p_em12 = <float*>r_em12.data
+        cdef float* p_dem12 = <float*>r_dem12.data
+        cdef float* p_had1 = <float*>r_had1.data
+        cdef float* p_emphi = <float*>r_emphi.data
+        cdef float* p_emtheta = <float*>r_emtheta.data
+        cdef float* p_phiwid = <float*>r_phiwid.data
+        cdef float* p_thewid = <float*>r_thewid.data
+        cdef float* p_em1x1 = <float*>r_em1x1.data
+        cdef float* p_em2x2a = <float*>r_em2x2a.data
+        cdef float* p_em2x2b = <float*>r_em2x2b.data
+        cdef float* p_em3x3a = <float*>r_em3x3a.data
+        cdef float* p_em3x3b = <float*>r_em3x3b.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppPHKELID]* fam
+        cdef pxd.CppPHKELID* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppPHKELID]()
+            for j in range(fam.size()):
+                b = <pxd.CppPHKELID*>fam.at(j)
+                p_id[g_idx] = b.getId()
+                
+                if b.phchrg == NULL:
+                    p_phchrg_id[g_idx] = -1
+                else:
+                    p_phchrg_id[g_idx] = b.phchrg.getId()
+
+                p_idstat[g_idx] = b.idstat
+                p_prob[g_idx] = b.prob
+                p_phi[g_idx] = b.phi
+                p_theta[g_idx] = b.theta
+                p_qp[g_idx] = b.qp
+                p_dphi[g_idx] = b.dphi
+                p_dtheta[g_idx] = b.dtheta
+                p_dqp[g_idx] = b.dqp
+                p_tphi[g_idx] = b.tphi
+                p_ttheta[g_idx] = b.ttheta
+                p_isolat[g_idx] = b.isolat
+                p_em1[g_idx] = b.em1
+                p_em12[g_idx] = b.em12
+                p_dem12[g_idx] = b.dem12
+                p_had1[g_idx] = b.had1
+                p_emphi[g_idx] = b.emphi
+                p_emtheta[g_idx] = b.emtheta
+                p_phiwid[g_idx] = b.phiwid
+                p_thewid[g_idx] = b.thewid
+                p_em1x1[g_idx] = b.em1x1
+                p_em2x2a[g_idx] = b.em2x2a
+                p_em2x2b[g_idx] = b.em2x2b
+                p_em3x3a[g_idx] = b.em3x3a
+                p_em3x3b[g_idx] = b.em3x3b
+                g_idx += 1
+
+        return {
+            '_offsets': arr_offsets, 'id': r_id, 'phchrg_id': r_phchrg_id, 
+            'idstat': r_idstat, 'prob': r_prob, 
+            'phi': r_phi, 'theta': r_theta, 'qp': r_qp, 'dphi': r_dphi, 'dtheta': r_dtheta, 'dqp': r_dqp, 
+            'tphi': r_tphi, 'ttheta': r_ttheta, 'isolat': r_isolat, 
+            'em1': r_em1, 'em12': r_em12, 'dem12': r_dem12, 'had1': r_had1, 
+            'emphi': r_emphi, 'emtheta': r_emtheta, 'phiwid': r_phiwid, 'thewid': r_thewid, 
+            'em1x1': r_em1x1, 'em2x2a': r_em2x2a, 'em2x2b': r_em2x2b, 'em3x3a': r_em3x3a, 'em3x3b': r_em3x3b
+        }
+
 
 # ==============================================================================
 # JazelleEvent Wrapper
@@ -1466,9 +2416,12 @@ cdef class PHKELID(Bank):
 
 cdef class JazelleEvent:
     """
-    Wrapper for the C++ JazelleEvent class.
-    Holds all bank data for a single event.
+    Wrapper for a single Jazelle event.
+    
+    This class provides access to event data and supports conversion
+    to various dictionary formats for different use cases.
     """
+    
     cdef pxd.CppJazelleEvent cpp_event
     cdef tuple _cached_families
     
@@ -1555,39 +2508,204 @@ cdef class JazelleEvent:
         cdef vector[string_view] cpp_names = pxd.getKnownBankNames()
         return [n.decode('utf-8') for n in cpp_names]
 
-    def to_dict(self, str orient='list', bint skip_empty=True):
+    def to_dict(
+        self,
+        orient: Literal['list', 'records'] = 'list',
+        skip_empty: bool = True
+    ) -> Dict:
         """
-        Serializes the entire event into a dictionary.
+        Convert event to dictionary format.
+        
+        Parameters
+        ----------
+        orient : {'list', 'records'}, default 'list'
+            Data orientation for multi-bank families:
+            
+            - 'list' : columnar format {attr: np.array([...])}
+            - 'records' : row format [{attr: val, ...}, ...]
+            
+        skip_empty : bool, default True
+            Whether to skip families with no banks.
+            
+        Returns
+        -------
+        dict
+            Event data in requested format.
+            
+        Examples
+        --------
+        >>> event = file[0]
+        >>> 
+        >>> # Default: columnar per-family
+        >>> data = event.to_dict()
+        >>> data['PHCHRG']['px']  # numpy array
+        >>> 
+        >>> # Row-oriented per-family
+        >>> data = event.to_dict(orient='records')
+        >>> data['PHCHRG'][0]['px']  # first bank's px value
         """
         cdef dict data = {}
-
+        cdef object family
+        
+        # Add IEVENTH (single bank per event)
         data["IEVENTH"] = self.ieventh.to_dict()
-
+        
+        # Add other families
         for family in self.getFamilies():
             if not skip_empty or len(family) > 0:
                 data[family.name] = family.to_dict(orient=orient)
+        
         return data
 
 
-# ==============================================================================
-# JazelleFile Wrapper
-# ==============================================================================
+# ============================================================================
+# JAZELLE FILE CLASS
+# ============================================================================
 
 cdef class JazelleFile:
     """
-    Wrapper for the C++ JazelleFile class.
-    Handles opening files, reading records, and random access.
-    Implements Context Manager protocol.
+    High-performance Jazelle file reader with parallel processing support.
+    
+    This class provides efficient access to Jazelle data files with:
+    - Sequential and random event access
+    - Parallel batch reading
+    - Flexible iteration strategies
+    
+    Parameters
+    ----------
+    filepath : str
+        Path to the Jazelle file
+    num_threads : int or None, optional
+        Number of threads for parallel operations.
+        - If None: Use global default (see set_default_num_threads)
+        - If 0: Auto-detect based on available cores
+        - If > 0: Use specified number of threads
+        - If < 0: Disable parallel processing
+    
+    Examples
+    --------
+    >>> # Using context manager (recommended)
+    >>> with JazelleFile('data.jazelle', num_threads=8) as f:
+    ...     print(f"File contains {len(f)} events")
+    ...     data = f.to_dict()
+    
+    >>> # Custom threading for specific operations
+    >>> with JazelleFile('data.jazelle') as f:
+    ...     # Override default for this operation
+    ...     data = f.to_dict(num_threads=16)
     """
     cdef unique_ptr[pxd.CppJazelleFile] cpp_obj
-    
-    def __cinit__(self, filepath):
+    cdef object _num_threads
+
+    def __cinit__(self, filepath: str, num_threads: Optional[int] = None):
+        """Initialize Jazelle file reader."""
         cdef string s_filepath = filepath.encode('UTF-8')
         try:
             self.cpp_obj.reset(new pxd.CppJazelleFile(s_filepath))
         except Exception as e:
             raise RuntimeError(f"Error opening Jazelle file: {e}")
+        
+        # Store the user-provided value (may be None)
+        self._num_threads = num_threads
 
+    def __len__(self):
+        return self.getTotalEvents()
+
+    def __iter__(self):
+        """
+        Default iterator (sequential, single events).
+        
+        Equivalent to iterate(batch_size=1).
+        
+        Examples
+        --------
+        >>> with JazelleFile('data.jazelle') as f:
+        ...     for event in f:
+        ...         print(event.ieventh.run)
+        """
+        return self.iterate(batch_size=1)
+
+    def __getitem__(self, int index):
+        if index < 0:
+            index += len(self)
+        if index < 0 or index >= len(self):
+            raise IndexError("Event index out of range")
+        
+        event = JazelleEvent()
+        if self.readEvent(index, event):
+            return event
+        else:
+            raise IndexError(f"Failed to read event at index {index}")
+
+    @property
+    def num_threads(self) -> int:
+        """
+        Get current default number of threads for this file.
+        
+        This property automatically syncs with the global default if no
+        instance-specific value was set. If the global default changes,
+        this property will reflect that change (unless an instance-specific
+        value was set via the constructor or set_num_threads()).
+        
+        Returns
+        -------
+        int
+            Number of threads to use:
+            - If instance value set: returns that value
+            - If global default set: returns global default
+            - Otherwise: returns 0 (auto-detect)
+        """
+        global _default_num_threads
+        
+        if self._num_threads is not None:
+            return self._num_threads
+        elif _default_num_threads is not None:
+            return _default_num_threads
+        else:
+            return 0
+
+    def set_num_threads(self, num_threads: Optional[int] = None):
+        """
+        Set the default number of threads for this file instance.
+        
+        This overrides both the global default and any value set during
+        construction. Set to None to resume syncing with global default.
+        
+        Parameters
+        ----------
+        num_threads : int or None
+            Number of threads:
+            - If None: Resume syncing with global default
+            - If 0: Auto-detect based on available cores
+            - If > 0: Use specified number of threads
+            - If < 0: Disable parallelization (force sequential)
+        
+        Examples
+        --------
+        >>> import jazelle
+        >>> 
+        >>> jazelle.set_default_num_threads(8)
+        >>> f = jazelle.JazelleFile('data.jazelle')
+        >>> print(f.num_threads)  # 8 (uses global)
+        >>> 
+        >>> f.set_num_threads(16)
+        >>> print(f.num_threads)  # 16 (overridden)
+        >>> 
+        >>> jazelle.set_default_num_threads(4)
+        >>> print(f.num_threads)  # Still 16 (not synced)
+        >>> 
+        >>> f.set_num_threads(None)
+        >>> print(f.num_threads)  # 4 (now syncs with global again)
+        """
+        self._num_threads = num_threads
+
+    def _resolve_num_threads(self, num_threads: Optional[int] = None):
+        return num_threads if num_threads is not None else self.num_threads
+
+    # ========================================================================
+    # Context Manager Protocol
+    # ========================================================================
+        
     def __enter__(self):
         """Context Manager entry."""
         return self
@@ -1599,25 +2717,10 @@ cdef class JazelleFile:
     def close(self):
         """Explicitly closes the file and frees resources."""
         self.cpp_obj.reset()
-
-    def read(self):
-        """Reads and returns the next event. Returns None at End of File."""
-        cdef JazelleEvent event = JazelleEvent()
-        if self.cpp_obj.get().nextRecord(event.cpp_event):
-            return event
-        return None
-            
-    def nextRecord(self, JazelleEvent event):
-        """Reads the next logical record into the provided event object."""
-        return self.cpp_obj.get().nextRecord(event.cpp_event)
-
-    def readEvent(self, int index, JazelleEvent event):
-        """Reads the event at the specified index."""
-        return self.cpp_obj.get().readEvent(index, event.cpp_event)
-
-    def getTotalEvents(self):
-        """Returns the total number of events in the file."""
-        return self.cpp_obj.get().getTotalEvents()
+        
+    # ========================================================================
+    # File Metadata Properties
+    # ========================================================================
         
     @property
     def fileName(self):
@@ -1639,164 +2742,400 @@ cdef class JazelleFile:
         """The type of the last read record (e.g., 'MINIDST')."""
         return (<bytes>self.cpp_obj.get().getLastRecordType()).decode('UTF-8')
 
+    def getTotalEvents(self):
+        """Returns the total number of events in the file."""
+        return self.cpp_obj.get().getTotalEvents()
+    
     def rewind(self):
         """Resets the file pointer to the first event."""
         self.cpp_obj.get().rewind()
 
-    def __len__(self):
-        return self.getTotalEvents()
+    # ========================================================================
+    # Basic Reading Operations
+    # ========================================================================
 
-    def __iter__(self):
-        """Iterates through events sequentially."""
-        self.rewind()
-        cdef JazelleEvent event
-        while True:
-            event = JazelleEvent()
-            if not self.cpp_obj.get().nextRecord(event.cpp_event):
-                break
-            yield event
-
-    def __getitem__(self, int index):
-        if index < 0:
-            index += len(self)
-        if index < 0 or index >= len(self):
-            raise IndexError("Event index out of range")
-        
-        event = JazelleEvent()
-        if self.readEvent(index, event):
+    def read(self):
+        """Reads and returns the next event. Returns None at End of File."""
+        cdef JazelleEvent event = JazelleEvent()
+        if self.cpp_obj.get().nextRecord(event.cpp_event):
             return event
-        else:
-            raise IndexError(f"Failed to read event at index {index}")
-
-    def read_parallel(self, int start=0, int count=-1, int num_threads=0):
-        """
-        Read events in parallel and return as list.
-        
-        Args:
-            start: Starting event index
-            count: Number of events (-1 for all remaining)
-            num_threads: Number of threads (0 for auto)
+        return None
             
-        Returns:
-            List of JazelleEvent objects
+    def nextRecord(self, JazelleEvent event):
+        """Reads the next logical record into the provided event object."""
+        return self.cpp_obj.get().nextRecord(event.cpp_event)
+
+    def readEvent(self, int index, JazelleEvent event):
+        """Reads the event at the specified index."""
+        return self.cpp_obj.get().readEvent(index, event.cpp_event)
+
+    # ========================================================================
+    # Batch Reading
+    # ========================================================================
+
+    def read_batch(
+        self,
+        start: int = 0,
+        count: int = -1,
+        num_threads: Optional[int] = None
+    ) -> List[JazelleEvent]:
+        """
+        Read a batch of events in parallel.
         
-        Example:
-            >>> with JazelleFile('data.jazelle') as f:
-            ...     events = f.read_parallel(0, 1000, num_threads=8)
-            ...     print(f"Read {len(events)} events")
+        This method reads multiple events efficiently using parallel threads.
+        The entire batch is returned as a list.
+        
+        Parameters
+        ----------
+        start : int, default 0
+            Starting event index
+        count : int, default -1
+            Number of events to read (-1 for all remaining)
+        num_threads : int or None, optional
+            Number of threads (None uses instance default)
+        
+        Returns
+        -------
+        list of JazelleEvent
+            Batch of events
+        
+        Examples
+        --------
+        >>> with JazelleFile('data.jazelle') as f:
+        ...     # Read first 1000 events using 8 threads
+        ...     events = f.read_batch(0, 1000, num_threads=8)
+        ...     print(f"Read {len(events)} events")
+        
+        >>> with JazelleFile('data.jazelle', num_threads=8) as f:
+        ...     # Uses instance default (8 threads)
+        ...     events = f.read_batch(1000, 500)
+        
+        Notes
+        -----
+        For very large batches, consider using iterate() instead to
+        process data in smaller chunks and avoid memory issues.
         """
         if count < 0:
             count = len(self) - start
         
-        # Call C++ method which returns a vector of events
+        cdef int resolved_threads = self._resolve_num_threads(num_threads)
+        
+        # Call C++ batch read method
         cdef vector[CppJazelleEvent] cpp_events = self.cpp_obj.get().readEventsBatch(
-            start, count, num_threads
+            start, count, resolved_threads
         )
         
-        # Convert C++ vector to Python list
+        # Convert to Python list
         cdef list py_events = []
         cdef JazelleEvent py_event
         cdef size_t i
         
         for i in range(cpp_events.size()):
             py_event = JazelleEvent.__new__(JazelleEvent)
-            # Copy the C++ event (uses copy constructor)
-            py_event.cpp_event = cpp_events[i]
+            py_event.cpp_event = move(cpp_events[i])
             py_events.append(py_event)
         
         return py_events
-    
-    def iter_parallel(self, int batch_size=100, int num_threads=0):
-        """
-        Parallel iterator yielding batches of events.
-        
-        This is the most memory-efficient way to process large files,
-        as it only keeps one batch in memory at a time.
-        
-        Args:
-            batch_size: Number of events per batch
-            num_threads: Number of reader threads (0 for auto)
-            
-        Yields:
-            List of JazelleEvent objects (batch_size events per iteration)
-        
-        Example:
-            >>> with JazelleFile('data.jazelle') as f:
-            ...     for batch in f.iter_parallel(batch_size=1000, num_threads=8):
-            ...         # Process batch
-            ...         for event in batch:
-            ...             print(event.ieventh.run, event.ieventh.event)
-        """
-        cdef int total = len(self)
-        cdef int start = 0
-        
-        while start < total:
-            count = min(batch_size, total - start)
-            yield self.read_parallel(start, count, num_threads)
-            start += count
-    
-    def to_dict_parallel(self, str orient='list', bint skip_empty=True, 
-                        int batch_size=100, int num_threads=0):
-        """
-        Convert entire file to dictionary format using parallel reading.
-        
-        This is ideal for converting to other formats like HDF5 or Parquet.
-        
-        Args:
-            orient: 'list' for columnar data, 'records' for row-based
-            skip_empty: Skip empty families
-            batch_size: Events per batch for processing
-            num_threads: Reader threads (0 for auto)
-            
-        Returns:
-            Dictionary with event data
-            
-        Example:
-            >>> with JazelleFile('data.jazelle') as f:
-            ...     data = f.to_dict_parallel(batch_size=1000, num_threads=8)
-            ...     # data['PHPSUM']['px'] is now a numpy array
-        """
-        from collections import defaultdict
-        import numpy as np
-        
-        # Accumulator for all batches
-        all_data = defaultdict(lambda: defaultdict(list))
-        
-        # Process in parallel batches
-        for batch in self.iter_parallel(batch_size=batch_size, num_threads=num_threads):
-            for event in batch:
-                event_dict = event.to_dict(orient='list', skip_empty=skip_empty)
-                
-                # Accumulate data
-                for family_name, family_data in event_dict.items():
-                    if family_name == 'IEVENTH':
-                        # Special case: single bank per event
-                        for key, value in family_data.items():
-                            all_data[family_name][key].append(value)
-                    else:
-                        # Multiple banks per event
-                        for key, value in family_data.items():
-                            if isinstance(value, np.ndarray):
-                                all_data[family_name][key].append(value)
-                            else:
-                                all_data[family_name][key].extend(value)
-        
-        # Convert lists to numpy arrays
-        result = {}
-        for family_name, family_data in all_data.items():
-            result[family_name] = {}
-            for key, value in family_data.items():
-                if isinstance(value, list) and len(value) > 0:
-                    if isinstance(value[0], np.ndarray):
-                        # Concatenate arrays
-                        result[family_name][key] = np.concatenate(value)
-                    else:
-                        result[family_name][key] = np.array(value)
-                else:
-                    result[family_name][key] = value
-        
-        return dict(result)            
 
+    # ========================================================================
+    # Iteration Methods
+    # ========================================================================
+    
+    def iterate(
+        self,
+        batch_size: int = 100,
+        num_threads: Optional[int] = None
+    ):
+        """
+        Flexible iterator with optional batching and parallelization.
+        
+        This is the unified iteration method that replaces both sequential
+        iteration and parallel batching. Behavior depends on batch_size:
+        
+        - batch_size = 1: Sequential iteration (no parallelization overhead)
+        - batch_size > 1: Parallel batch iteration
+        
+        Parameters
+        ----------
+        batch_size : int, default 1
+            Number of events per iteration:
+            - 1: Yield single events sequentially (most memory-efficient)
+            - >1: Yield batches using parallel reading
+        num_threads : int or None, optional
+            Number of threads for parallel reading (only used if batch_size > 1)
+            None uses instance default
+        
+        Yields
+        ------
+        JazelleEvent or list of JazelleEvent
+            - If batch_size=1: Single event
+            - If batch_size>1: List of events (batch)
+        
+        Examples
+        --------
+        >>> # Sequential iteration (most efficient for one-by-one processing)
+        >>> with JazelleFile('data.jazelle') as f:
+        ...     for event in f.iterate():
+        ...         print(event.ieventh.run, event.ieventh.event)
+        
+        >>> # Parallel batch iteration
+        >>> with JazelleFile('data.jazelle', num_threads=8) as f:
+        ...     for batch in f.iterate(batch_size=1000):
+        ...         # Process 1000 events at a time
+        ...         for event in batch:
+        ...             process(event)
+        
+        >>> # Override threading for this iteration
+        >>> with JazelleFile('data.jazelle') as f:
+        ...     for batch in f.iterate(batch_size=500, num_threads=16):
+        ...         analyze_batch(batch)
+        
+        Notes
+        -----
+        - For batch_size=1, this is equivalent to __iter__() and uses
+          sequential reading regardless of num_threads
+        - For large files, batch_size=100-1000 often provides good
+          balance between memory and parallelization benefits
+        """
+        cdef JazelleEvent event
+        cdef int total
+        cdef int start
+        cdef int count
+        cdef int resolved_threads
+        
+        if batch_size <= 1:
+            # Sequential iteration (no parallelization overhead)
+            self.rewind()
+            while True:
+                event = JazelleEvent()
+                if not self.cpp_obj.get().nextRecord(event.cpp_event):
+                    break
+                yield event
+        else:
+            # Parallel batch iteration
+            total = len(self)
+            start = 0
+            resolved_threads = self._resolve_num_threads(num_threads)
+            
+            while start < total:
+                count = min(batch_size, total - start)
+                yield self.read_batch(start, count, resolved_threads)
+                start += count
+
+    # ========================================================================
+    # Dictionary Conversion
+    # ========================================================================
+    
+    def to_dict(
+        self,
+        layout: Literal['columnar', 'jagged'] = 'columnar',
+        max_events: Optional[int] = None,
+        batch_size: int = 1000,
+        num_threads: Optional[int] = None
+    ) -> Dict:
+        """
+        Convert file to dictionary format with flexible parallelization.
+        
+        Parameters
+        ----------
+        layout : {'columnar', 'jagged'}, default 'columnar'
+            The structural layout of the output dictionary:
+            
+            - 'columnar' : Columnar arrays with offset tracking (recommended)
+              Best for performance, HDF5, and vectorization.
+              
+            - 'jagged': 
+              Best for interactive analysis. 
+              Returns a list of arrays (one per event).
+            
+        max_events : int, optional
+            Maximum number of events to process (None for all)
+            
+        batch_size : int, default 1000
+            Events per batch for parallel processing:
+            - 0 or 1: Sequential processing (no parallelization)
+            - >1: Parallel batch processing
+            
+        num_threads : int or None, optional
+            Number of threads (None uses instance default)
+            Set to 0 for auto-detect, negative to force sequential
+        
+        Returns
+        -------
+        dict
+            File data in specified format
+        
+        Examples
+        --------
+        >>> # Recommended: Offset format for production
+        >>> with JazelleFile('data.jazelle', num_threads=8) as f:
+        ...     data = f.to_dict(output_format='columnar')
+        ...     # Uses instance default (8 threads), batch_size=100
+        ...     
+        ...     # Access event 5
+        ...     from jazelle import get_event
+        ...     event5 = get_event(data, 'PHCHRG', 5)
+        
+        >>> # Interactive: Jagged format for easy access
+        >>> with JazelleFile('data.jazelle') as f:
+        ...     data = f.to_dict(
+        ...         layout='jagged',
+        ...         batch_size=1000,
+        ...         num_threads=16  # Override instance default
+        ...     )
+        ...     event5_px = data['PHCHRG']['px'][5]  # Direct access
+        
+        >>> # Sequential processing (explicit)
+        >>> with JazelleFile('data.jazelle') as f:
+        ...     data = f.to_dict(batch_size=0)  # No parallelization
+        
+        See Also
+        --------
+        iterate : For processing events without loading all into memory
+        read_batch : For reading specific event ranges
+        
+        Notes
+        -----
+        - The 'columnar' format is recommended for most use cases
+        - For files <1000 events, sequential processing is often faster
+        - For files >10k events, parallel processing with batch_size=100-1000
+          provides significant speedup
+        - Memory usage scales with batch_size * num_threads
+        """
+        cdef int n_threads = self._resolve_num_threads(num_threads)
+        cdef int total = self.getTotalEvents()
+        cdef int start = 0
+        cdef int count_to_read
+        cdef int total_processed = 0
+
+        if layout not in ['columnar', 'jagged']:
+            raise ValueError(
+                f"Invalid layout '{layout}'. Must be 'columnar' or 'jagged'."
+            )
+        
+        if max_events is not None:
+            total = min(total, max_events)
+
+        accumulators = defaultdict(list)
+        cdef std_map[string_view, BatchExtractor].iterator it
+        cdef string_view bank_name
+        cdef BatchExtractor func_ptr
+        cdef vector[pxd.CppJazelleEvent] cpp_batch
+        cdef dict batch_data
+
+        cdef EventBatchWrapper batch_wrapper = EventBatchWrapper()
+        while start < total:
+            count_to_read = min(batch_size, total - start)
+            
+            # 1. Read C++ Batch (Parallel)
+            cpp_batch = self.cpp_obj.get().readEventsBatch(start, count_to_read, n_threads)
+            
+            if cpp_batch.empty(): break
+
+            it = _batch_extractors.begin()
+            while it != _batch_extractors.end():
+                bank_name = deref(it).first
+                func_ptr = deref(it).second
+                
+                # Call the cdef function via pointer
+                batch_data = func_ptr(&cpp_batch)
+                
+                # Store results (PyStr creation happens here)
+                py_name = (<bytes>bank_name).decode('utf-8')
+                for k, v in batch_data.items():
+                    accumulators[(py_name, k)].append(v)
+                
+                inc(it) # Next extractor
+
+            start += cpp_batch.size()
+            total_processed += cpp_batch.size()
+            
+            # Clear immediately to free memory
+            cpp_batch.clear()
+
+        # 3. Stitch & Format
+        cdef dict flat_arrays = {}
+        cdef dict family_offsets = {}
+        cdef str key, fam, attr
+        
+        # Stitch chunks together
+        for (fam, attr), arr_list in accumulators.items():
+            
+            # Determine if concatenation is needed
+            if len(arr_list) == 1:
+                data = arr_list[0]
+            else:
+                data = np.concatenate(arr_list)
+
+            if attr == '_offsets':
+                family_offsets[fam] = self._stitch_offsets(arr_list)
+            else:
+                if fam not in flat_arrays: flat_arrays[fam] = {}
+                flat_arrays[fam][attr] = data
+
+        # Build final structure based on format
+        cdef dict final_output = {}
+        
+        for fam, attrs in flat_arrays.items():
+            final_output[fam] = {}
+            
+            # IEVENTH is scalar, always just arrays
+            if fam == 'IEVENTH':
+                final_output[fam] = attrs
+                continue
+
+            if layout == 'columnar':
+                final_output[fam] = attrs
+                if fam in family_offsets:
+                    final_output[fam]['_offsets'] = family_offsets[fam]
+            
+            elif layout == 'jagged':
+                if fam in family_offsets:
+                    # Use offsets to split the big array into list of event-arrays
+                    offsets = family_offsets[fam]
+                    # Calculate split indices from offsets (offsets is [0, 5, 10...])
+                    # Indices needed are [5, 10...]
+                    indices = offsets[1:-1]
+                    
+                    for attr_name, big_arr in attrs.items():
+                        final_output[fam][attr_name] = np.split(big_arr, indices)
+                else:
+                    final_output[fam] = attrs
+            
+        return final_output
+
+    cdef object _stitch_offsets(self, list offsets_list):
+        if not offsets_list: return np.array([0], dtype=np.int64)
+        cdef list result = [offsets_list[0]]
+        cdef int64_t last_val = offsets_list[0][-1]
+        for arr in offsets_list[1:]:
+            result.append(arr[1:] + last_val)
+            last_val += arr[-1]
+        return np.concatenate(result)
+        
+    @property
+    def metadata(self) -> dict:
+        """
+        Retrieve metadata from the Jazelle file header.
+
+        Returns
+        -------
+        dict
+            Dictionary containing file header information:
+            - filename: Original internal filename
+            - creation_date: ISO 8601 formatted string
+            - modified_date: ISO 8601 formatted string
+            - last_record_type: Type of the last record processed
+        """
+        def fmt_date(dt):
+            return dt.isoformat() if dt else None
+
+        return {
+            'filename': self.fileName,
+            'creation_date': fmt_date(self.creationDate),
+            'modified_date': fmt_date(self.modifiedDate),
+            'last_record_type': self.lastRecordType
+        }
 
 # ==============================================================================
 # Initialization
@@ -1812,4 +3151,23 @@ def _register_wrappers():
         if inspect.isclass(obj) and issubclass(obj, Bank) and obj is not Bank:
             _WRAPPER_MAP[name] = obj
 
+cdef void _init_extractors():
+    """
+    Populate the C++ function pointer map.
+    This runs once when the module is imported.
+    """
+    # Single source of truth for active banks
+    register_extractor(b"IEVENTH", IEVENTH.extract_from_vector)
+    register_extractor(b"MCHEAD",  MCHEAD.extract_from_vector)
+    register_extractor(b"MCPART",  MCPART.extract_from_vector)
+    register_extractor(b"PHPSUM",  PHPSUM.extract_from_vector)
+    register_extractor(b"PHCHRG",  PHCHRG.extract_from_vector)
+    register_extractor(b"PHKLUS",  PHKLUS.extract_from_vector)
+    register_extractor(b"PHWIC",  PHWIC.extract_from_vector)
+    register_extractor(b"PHCRID",  PHCRID.extract_from_vector)
+    register_extractor(b"PHKTRK",  PHKTRK.extract_from_vector)
+    register_extractor(b"PHKELID",  PHKELID.extract_from_vector)
+
+# Run initialization immediately
 _register_wrappers()
+_init_extractors()
