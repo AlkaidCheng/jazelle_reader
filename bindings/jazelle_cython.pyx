@@ -3114,33 +3114,29 @@ cdef class JazelleFile:
             last_val += arr[-1]
         return np.concatenate(result)
         
-    
-    cdef dict _get_metadata_dict(self, int total_events, str output_format):
+    @property
+    def metadata(self) -> dict:
         """
-        Create metadata dictionary.
-        
+        Retrieve metadata from the Jazelle file header.
+
         Returns
         -------
         dict
-            Metadata dictionary with file information.
+            Dictionary containing file header information:
+            - filename: Original internal filename
+            - creation_date: ISO 8601 formatted string
+            - modified_date: ISO 8601 formatted string
+            - last_record_type: Type of the last record processed
         """
+        def fmt_date(dt):
+            return dt.isoformat() if dt else None
+
         return {
             'filename': self.fileName,
-            'total_events': total_events,
-            'record_type': self.lastRecordType,
-            'creation_date': str(self.creationDate),
-            'modified_date': str(self.modifiedDate),
-            'format': output_format,
-            'format_description': self._get_format_description(output_format)
+            'creation_date': fmt_date(self.creationDate),
+            'modified_date': fmt_date(self.modifiedDate),
+            'last_record_type': self.lastRecordType
         }
-    
-    cdef str _get_format_description(self, str format):
-        """Get human-readable format description."""
-        descriptions = {
-            'columnar': 'Columnar data with offset arrays for variable-length families',
-            'jagged': 'List of arrays preserving event boundaries'
-        }
-        return descriptions.get(format, 'Unknown format')
 
 # ==============================================================================
 # Initialization
