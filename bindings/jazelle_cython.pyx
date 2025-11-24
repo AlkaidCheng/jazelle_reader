@@ -2922,7 +2922,7 @@ cdef class JazelleFile:
     def to_dict(
         self,
         layout: str = 'columnar',
-        start_index: int = 0,
+        start: int = 0,
         count: int = -1,
         batch_size: int = 1000,
         num_threads: Optional[int] = None
@@ -2942,7 +2942,7 @@ cdef class JazelleFile:
               Best for interactive analysis. 
               Returns a list of arrays (one per event).
             
-        start_index: int, default 0
+        start: int, default 0
             Index of the first event to read.
             
         count: int, default -1
@@ -3002,16 +3002,16 @@ cdef class JazelleFile:
         cdef int n_threads = self._resolve_num_threads(num_threads)
         cdef int total = self.getTotalEvents()
 
-        if start_index < 0:
-            start_index = 0
-        if start_index >= total:
+        if start < 0:
+            start = 0
+        if start >= total:
             return {}
             
         cdef int end_index = total
         if count >= 0:
-            end_index = min(total, start_index + count)
+            end_index = min(total, start + count)
             
-        cdef int current_start = start_index
+        cdef int current_start = start
         cdef int chunk_count
 
         if layout not in ['columnar', 'jagged']:
