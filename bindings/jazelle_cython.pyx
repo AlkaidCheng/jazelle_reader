@@ -3060,7 +3060,7 @@ cdef class JazelleFile:
         
         # Stitch chunks together
         for key, arr_list in accumulators.items():
-            fam, attr = key.split('_', 1)
+            fam, attr = key.rsplit('_', 1)
             
             # Determine if concatenation is needed
             if len(arr_list) == 1:
