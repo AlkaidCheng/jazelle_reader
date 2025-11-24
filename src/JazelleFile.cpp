@@ -14,7 +14,6 @@
 #include <vector>
 #include <thread>
 
-
 namespace jazelle
 {
     /**
@@ -326,12 +325,12 @@ namespace jazelle
 
         while (true)
         {
-            m_impl->m_event_offsets.push_back(m_impl->stream->getCurrentRecordOffset());
-
             if (!m_impl->stream->nextLogicalRecord())
             {
                 break;
             }
+            
+            m_impl->m_event_offsets.push_back(m_impl->stream->getCurrentRecordOffset());
         }
 
         m_impl->m_index_built = true;
@@ -441,7 +440,9 @@ namespace jazelle
         // Clamp to reasonable values
         if (num_threads > 32) num_threads = 32;
         
-        int32_t end_idx = std::min(start_idx + count, getTotalEvents());
+        // Physical total
+        int32_t physical_total = m_impl->m_event_offsets.size();
+        int32_t end_idx = std::min(start_idx + count, physical_total);
         if (start_idx >= end_idx) return;
         
         // Get filepath once
