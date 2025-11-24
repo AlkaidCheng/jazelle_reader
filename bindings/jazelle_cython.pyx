@@ -2979,7 +2979,7 @@ cdef class JazelleFile:
         >>> # Interactive: Jagged format for easy access
         >>> with JazelleFile('data.jazelle') as f:
         ...     data = f.to_dict(
-        ...         output_format='jagged',
+        ...         layout='jagged',
         ...         batch_size=1000,
         ...         num_threads=16  # Override instance default
         ...     )
