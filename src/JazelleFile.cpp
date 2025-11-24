@@ -14,7 +14,6 @@
 #include <vector>
 #include <thread>
 
-
 namespace jazelle
 {
     /**
@@ -326,12 +325,12 @@ namespace jazelle
 
         while (true)
         {
-            m_impl->m_event_offsets.push_back(m_impl->stream->getCurrentRecordOffset());
-
             if (!m_impl->stream->nextLogicalRecord())
             {
                 break;
             }
+            
+            m_impl->m_event_offsets.push_back(m_impl->stream->getCurrentRecordOffset());
         }
 
         m_impl->m_index_built = true;
