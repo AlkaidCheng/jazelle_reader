@@ -114,14 +114,14 @@ namespace jazelle
             [[maybe_unused]] int32_t tocsiz = ctx.stream->readInt();
             int32_t datsiz = ctx.stream->readInt();
             
-            [[maybe_unused]] int32_t tocoff1 = ctx.stream->readInt();
-            [[maybe_unused]] int32_t tocoff2 = ctx.stream->readInt();
-            [[maybe_unused]] int32_t tocoff3 = ctx.stream->readInt();
-            [[maybe_unused]] int32_t datoff = ctx.stream->readInt();
+            int32_t tocoff1 = ctx.stream->readInt();
+            int32_t tocoff2 = ctx.stream->readInt();
+            int32_t tocoff3 = ctx.stream->readInt();
+            int32_t datoff = ctx.stream->readInt();
                 
             [[maybe_unused]] std::string segname = ctx.stream->readString(8);
             std::string usrnam = ctx.stream->readString(8);
-            [[maybe_unused]] int32_t usroff = ctx.stream->readInt();
+            int32_t usroff = ctx.stream->readInt();
                 
             [[maybe_unused]] int32_t lrecflgs = ctx.stream->readInt();
             [[maybe_unused]] int32_t spare1 = ctx.stream->readInt();
@@ -130,16 +130,37 @@ namespace jazelle
             // Read the event header
             if (usrnam == "IJEVHD")
             {
+                if (ctx.stream->getNBytes() != usroff) {
+                    throw std::runtime_error(
+                        "Consistency Check Failed: 'usrOff' mismatch. Expected: " + 
+                        std::to_string(usroff) + ", Actual: " + std::to_string(ctx.stream->getNBytes())
+                    );
+                }
                 event.ieventh.read(*ctx.stream);
             }
 
             if (format == "MINIDST")
             {
+
+                if (ctx.stream->getNBytes() != tocoff1) {
+                    throw std::runtime_error(
+                        "Consistency Check Failed: 'tocOff' mismatch. Expected: " + 
+                        std::to_string(tocoff1) + ", Actual: " + std::to_string(ctx.stream->getNBytes())
+                    );
+                }
+                
                 PHMTOC toc(*ctx.stream);
                 
                 if (datrec > 0)
                 {
                     ctx.stream->nextPhysicalRecord();
+                }
+
+                if (ctx.stream->getNBytes() != datoff) {
+                     throw std::runtime_error(
+                        "Consistency Check Failed: 'datOff' mismatch. Expected: " + 
+                        std::to_string(datoff) + ", Actual: " + std::to_string(ctx.stream->getNBytes())
+                    );
                 }
 
                 // Read the entire data record
