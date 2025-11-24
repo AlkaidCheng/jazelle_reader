@@ -440,9 +440,7 @@ namespace jazelle
         // Clamp to reasonable values
         if (num_threads > 32) num_threads = 32;
         
-        // Physical total
-        int32_t physical_total = m_impl->m_event_offsets.size();
-        int32_t end_idx = std::min(start_idx + count, physical_total);
+        int32_t end_idx = std::min(start_idx + count, getTotalEvents());
         if (start_idx >= end_idx) return;
         
         // Get filepath once
