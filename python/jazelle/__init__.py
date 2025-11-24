@@ -4,51 +4,57 @@ Jazelle - A fast reader for SLD Jazelle files
 
 from ._version import __version__
 
-from .jazelle_cython import JazelleFile, JazelleEvent
+# Core Classes
+from .jazelle_cython import JazelleEvent, Family
+from .jazelle_file import JazelleFile
 
+# IO Functions
+from .streamers.parquet_streamer import to_parquet, from_parquet
+from .streamers.hdf5_streamer import to_hdf5, from_hdf5
+from .streamers.json_streamer import to_json, from_json
+from .streamers.feather_streamer import to_feather, from_feather
+
+# Data Structures
 from .jazelle_cython import (
-    # Helper structs
-    PIDVEC,
-    CRIDHYP,
-    
-    # Bank types
-    IEVENTH,
-    MCHEAD,
-    MCPART,
-    PHPSUM,
-    PHCHRG,
-    PHKLUS,
-    PHWIC,
-    PHCRID,
-    PHKTRK,
-    PHKELID,
-    
-    # Family container
-    Family,
+    PIDVEC, CRIDHYP,
+    IEVENTH, MCHEAD, MCPART, PHPSUM, PHCHRG, 
+    PHKLUS, PHWIC, PHCRID, PHKTRK, PHKELID
 )
 
-__all__ = [
-    # Version
-    '__version__',
+def open(filename: str, **kwargs) -> JazelleFile:
+    """
+    Open a Jazelle file for reading.
     
-    # Main classes
+    Parameters
+    ----------
+    filename : str
+        Path to the file.
+    **kwargs
+        Arguments passed to the ``JazelleFile`` constructor 
+        (e.g., ``num_threads``).
+    
+    Returns
+    -------
+    JazelleFile
+        The open file object.
+    """
+    return JazelleFile(filename, **kwargs)
+
+__all__ = [
+    '__version__',
+    'open',
     'JazelleFile',
     'JazelleEvent',
     'Family',
     
-    # Helper structs
-    'PIDVEC',
-    'CRIDHYP',
+    # IO
+    'to_parquet', 'from_parquet',
+    'to_hdf5', 'from_hdf5',
+    'to_json', 'from_json',
+    'to_feather', 'from_feather',
     
-    # Bank types
-    'IEVENTH',
-    'MCHEAD',
-    'MCPART',
-    'PHPSUM',
-    'PHCHRG',
-    'PHKLUS',
-    'PHWIC',
-    'PHCRID',
-    'PHKTRK',
-    'PHKELID',
+    # Banks
+    'IEVENTH', 'MCHEAD', 'MCPART', 'PHPSUM', 'PHCHRG', 
+    'PHKLUS', 'PHWIC', 'PHCRID', 'PHKTRK', 'PHKELID',
+    'PIDVEC', 'CRIDHYP'
 ]
