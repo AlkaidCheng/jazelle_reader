@@ -2601,7 +2601,7 @@ cdef class JazelleFile:
         """Initialize Jazelle file reader."""
         cdef string s_filepath = filepath.encode('UTF-8')
         try:
-            self.cpp_obj.reset(new CppJazelleFile(s_filepath))
+            self.cpp_obj.reset(new pxd.CppJazelleFile(s_filepath))
         except Exception as e:
             raise RuntimeError(f"Error opening Jazelle file: {e}")
         
