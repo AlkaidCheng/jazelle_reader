@@ -169,6 +169,7 @@ namespace jazelle
         static void parseMiniDst(const PHMTOC& toc, JazelleEvent& event, 
                                 const DataBuffer& buffer);
 
+
     private:
         /**
          * @struct Impl
