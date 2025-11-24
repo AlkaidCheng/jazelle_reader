@@ -1,7 +1,7 @@
 """
 Utilities for converting internal data structures to third-party formats.
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Tuple, Any, Optional
 from .utils import requires_packages
 
 @requires_packages({'awkward': '2.0.0'})
@@ -84,3 +84,67 @@ def dict_to_awkward(data: Dict[str, Any], metadata: Optional[Dict[str, Any]] = N
     )
     
     return ak.Array(layout)
+
+@requires_packages({'awkward': '2.0.0'})
+def awkward_to_dict(array) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+    """
+    Convert an Awkward Array back to a Jazelle dictionary (columnar layout).
+
+    This allows Awkward Arrays to be converted back into the format required
+    by the HDF5Streamer or other internal tools.
+
+    Parameters
+    ----------
+    array : awkward.Array
+        The input array to convert.
+
+    Returns
+    -------
+    tuple
+        (data_dict, metadata)
+    """
+    import awkward as ak
+    import numpy as np
+    
+    if not isinstance(array, ak.Array):
+        raise TypeError(f"Input must be an awkward.Array, not {type(array)}")
+
+    data = {}
+    metadata = array.layout.parameters or None
+    
+    for family_name in array.fields:
+        family_content = array[family_name]
+        family_dict = {}
+        
+        layout = family_content.layout
+        
+        # 1. Handle Jagged Arrays (ListOffsetArray)
+        if isinstance(layout, ak.contents.ListOffsetArray):
+            # Extract offsets (Zero-copy view if possible)
+            family_dict['_offsets'] = np.asarray(layout.offsets)
+            
+            # Drill down to the flat content
+            record_content = layout.content
+        else:
+            # Handle Singleton/Flat Arrays
+            record_content = layout
+            
+        # 2. Extract Columns from RecordArray
+        if isinstance(record_content, ak.contents.RecordArray):
+            for i, field in enumerate(record_content.fields):
+                content = record_content.content(i)
+                
+                # We expect flat NumpyArrays here
+                if isinstance(content, ak.contents.NumpyArray):
+                    family_dict[field] = np.asarray(content.data)
+                else:
+                    # Fallback: try to convert nested/complex columns to numpy
+                    try:
+                        family_dict[field] = ak.to_numpy(ak.Array(content))
+                    except Exception:
+                        pass
+        
+        if family_dict:
+            data[family_name] = family_dict
+            
+    return data, metadata
