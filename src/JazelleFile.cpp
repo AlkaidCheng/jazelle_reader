@@ -115,7 +115,7 @@ namespace jazelle
             int32_t datsiz = ctx.stream->readInt();
             
             int32_t tocoff1 = ctx.stream->readInt();
-            int32_t tocoff2 = ctx.stream->readInt(); 
+            int32_t tocoff2 = ctx.stream->readInt();
             int32_t tocoff3 = ctx.stream->readInt();
             int32_t datoff = ctx.stream->readInt();
                 
