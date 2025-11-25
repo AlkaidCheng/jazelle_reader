@@ -2885,8 +2885,13 @@ cdef class JazelleFile:
 
     @property
     def lastRecordType(self):
-        """The type of the last read record (e.g., 'MINIDST')."""
+        """The type of the last read record (e.g., 'EVENT')."""
         return (<bytes>self.cpp_obj.get().getLastRecordType()).decode('UTF-8')
+
+    @property
+    def lastFormat(self):
+        """The format of the last read record (e.g., 'MINIDST')."""
+        return (<bytes>self.cpp_obj.get().getLastFormat()).decode('UTF-8')
 
     def getTotalEvents(self):
         """Returns the total number of events in the file."""

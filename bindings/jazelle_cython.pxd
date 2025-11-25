@@ -181,6 +181,7 @@ cdef extern from "jazelle/JazelleFile.hpp" namespace "jazelle":
         system_clock.time_point getCreationDate()
         system_clock.time_point getModifiedDate()
         string getLastRecordType()
+        string getLastFormat()
         void rewind() except +
 
         vector[CppJazelleEvent] readEventsBatch(
