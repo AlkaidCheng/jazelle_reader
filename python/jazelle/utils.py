@@ -239,12 +239,8 @@ class TableDisplay:
             visible_indices = list(range(n_cols))
             
         else:
-            # DOES NOT FIT: Iteratively remove columns from the middle until it fits
+            # Iteratively remove columns from the middle until it fits
             current_width = 0
-            # Always keep ID (col 0)
-            left_idx = 0
-            # Always keep last column
-            right_idx = n_cols - 1
             
             # Start with minimal set: [0, ..., N-1]
             # Base width = width(0) + width(...) + width(N-1) + separators
