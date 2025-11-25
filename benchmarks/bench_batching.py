@@ -1,43 +1,54 @@
-import jazelle
-import sys
-from utils import benchmark, get_parser, print_results, save_results_json
+from utils import JazelleBenchmark, get_parser
 
-def main():
-    parser = get_parser("Benchmark batch size scaling")
-    args = parser.parse_args()
-    
-    batch_sizes = [1, 100, 500, 1000, 5000, 10000]
-    THREADS = 8
-    results = []
-    
-    try:
-        with jazelle.open(args.input_file) as f:
-            total = len(f)
-            actual_count = total if args.count == -1 else min(args.count, total)
-            threads_str = "auto" if THREADS == 0 else str(THREADS)
-            print(f"File: {args.input_file} | Processing: {actual_count} | Threads: {threads_str}")
+class BatchingBenchmark(JazelleBenchmark):
+    def __init__(self, filepath, count=-1, runs=5, output=None, num_threads=0):
+        super().__init__(filepath, count, runs, output)
+        self.num_threads = num_threads
 
-            for b in batch_sizes:
-                if b > actual_count and b != batch_sizes[0]: 
-                    continue
+    def run(self):
+        # Define batch sizes to test
+        batch_sizes = [1, 100, 500, 1000, 5000, 10000, 50000]
+        
+        # Filter sizes larger than total count to avoid redundant tests
+        valid_sizes = [b for b in batch_sizes if b <= self.actual_count]
+        if not valid_sizes: 
+            valid_sizes = [self.actual_count]
+        
+        # Ensure largest possible batch is tested if not already included
+        if self.actual_count not in valid_sizes and self.actual_count < 100000:
+             valid_sizes.append(self.actual_count)
+             
+        valid_sizes.sort()
 
-                @benchmark(f"Batch Size: {b:5d}", n_runs=args.runs)
-                def run_batch(file_obj, cnt, b_size):
-                    _ = file_obj.to_arrays(count=cnt, batch_size=b_size, num_threads=THREADS)
-                
-                res = run_batch(f, args.count, b)
-                results.append(res)
+        print(f"Scanning batch sizes: {valid_sizes}")
+        thread_str = "Auto" if self.num_threads == 0 else str(self.num_threads)
+        print(f"Threads: {thread_str}")
+        print("-" * 40)
 
-        title = "Batch Size Benchmarks"
-        print_results(results, title)
+        for b in valid_sizes:
+            name = f"Batch Size: {b:6d}"
+            self.measure(name, self._bench_func, batch_size=b)
+            
+        self.report(f"Batch Size Scaling (Threads={thread_str})")
 
-        if args.output:
-            meta = {"input_file": args.input_file, "processed_events": actual_count, "threads": THREADS}
-            save_results_json(results, args.output, title=title, meta=meta)
-
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+    def _bench_func(self, f, count, batch_size):\
+        return f.to_arrays(count=count, batch_size=batch_size, num_threads=self.num_threads)
 
 if __name__ == "__main__":
-    main()
+    # Get base parser and extend it
+    parser = get_parser()
+    parser.add_argument('-t', '--threads', type=int, default=0, help="Number of threads (0=Auto)")
+    args = parser.parse_args()
+
+    bench = BatchingBenchmark(
+        args.input_file, 
+        args.count, 
+        args.runs, 
+        args.output,
+        num_threads=args.threads
+    )
+    
+    try:
+        bench.run()
+    finally:
+        bench.close()

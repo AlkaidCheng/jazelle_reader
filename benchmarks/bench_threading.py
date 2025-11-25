@@ -1,46 +1,36 @@
-import jazelle
 import multiprocessing
-import sys
-from utils import benchmark, get_parser, print_results, save_results_json
+from utils import JazelleBenchmark, get_parser
 
-def main():
-    parser = get_parser("Benchmark multi-threading scaling")
-    args = parser.parse_args()
-    
-    max_cores = multiprocessing.cpu_count()
-    thread_counts = [1]
-    curr = 2
-    while curr <= max_cores:
-        thread_counts.append(curr)
-        curr *= 2
-    
-    BATCH_SIZE = 1000 
-    results = []
-    
-    try:
-        with jazelle.open(args.input_file) as f:
-            total = len(f)
-            actual_count = total if args.count == -1 else min(args.count, total)
-            print(f"File: {args.input_file} | Processing: {actual_count} | Batch Size: {BATCH_SIZE}")
+class ThreadingBenchmark(JazelleBenchmark):
+    def run(self):
+        max_cores = multiprocessing.cpu_count()
+        threads = [1]
+        curr = 2
+        while curr <= max_cores:
+            threads.append(curr)
+            curr *= 2
+            
+        # Fixed batch size for fair comparison
+        fixed_batch = 1000
+        
+        print(f"Scanning thread counts: {threads}")
+        print(f"Fixed Batch Size: {fixed_batch}")
+        print("-" * 40)
 
-            for t in thread_counts:
-                @benchmark(f"Threads: {t:2d}", n_runs=args.runs)
-                def run_threads(file_obj, cnt, threads):
-                    _ = file_obj.to_arrays(count=cnt, batch_size=BATCH_SIZE, num_threads=threads)
-                
-                res = run_threads(f, args.count, t)
-                results.append(res)
+        for t in threads:
+            name = f"Threads: {t:2d}"
+            self.measure(name, self._bench_func, num_threads=t, batch_size=fixed_batch)
+            
+        self.report(f"Threading Scaling (Batch={fixed_batch})")
 
-        title = f"Threading Benchmarks (Fixed Batch={BATCH_SIZE})"
-        print_results(results, title)
-
-        if args.output:
-            meta = {"input_file": args.input_file, "batch_size": BATCH_SIZE, "processed_events": actual_count}
-            save_results_json(results, args.output, title=title, meta=meta)
-
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+    def _bench_func(self, f, count, num_threads, batch_size):
+        # to_arrays exercises the parallel reader + data conversion
+        f.to_arrays(count=count, num_threads=num_threads, batch_size=batch_size)
 
 if __name__ == "__main__":
-    main()
+    args = get_parser().parse_args()
+    bench = ThreadingBenchmark(args.input_file, args.count, args.runs, args.output)
+    try:
+        bench.run()
+    finally:
+        bench.close()
