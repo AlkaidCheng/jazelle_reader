@@ -91,9 +91,8 @@ def handle_inspect(args):
 
             if args.tail:
                 start = max(0, total - count)
-                title_pfx = "Tail"
             else:
-                title_pfx = "Head"
+                pass
 
             if count > 0:
                 table = f.display(start=start, count=count, banks=resolved_banks)
