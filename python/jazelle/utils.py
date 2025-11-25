@@ -5,6 +5,7 @@ General utility functions and decorators for the Jazelle package.
 import functools
 import importlib.util
 import shutil
+import html
 from packaging import version
 from typing import Dict, Optional, Callable, Any
 
@@ -337,6 +338,7 @@ class TableDisplay:
         """
         Generate an HTML table for Jupyter.
         Uses class="dataframe" to inherit native Jupyter/Pandas styling.
+        Secure against XSS by escaping all user content.
         """
         if not self.headers:
             return "<em>(Empty or all columns hidden)</em>"
@@ -345,44 +347,48 @@ class TableDisplay:
         split_idx = len(self.rows) // 2 if is_truncated else -1
 
         # Container
-        # Added font-family to ensure consistency if not inherited
-        html = ['<div style="overflow: auto; font-family: sans-serif;">']
+        html_out = ['<div style="overflow: auto; font-family: sans-serif;">']
         
         if self.title:
-            # Title styling: uppercase, bold, and reduced opacity for consistency with event headers and to establish visual hierarchy.
-            html.append(
+            safe_title = html.escape(str(self.title))
+            html_out.append(
                 f'<div style="margin-bottom: 8px; font-weight: bold; text-transform: uppercase; font-size: 0.85em; opacity: 0.8;">'
-                f'{self.title}'
+                f'{safe_title}'
                 f'</div>'
             )
         
         # Table
-        html.append('<table border="1" class="dataframe" style="border: none; border-collapse: collapse; border-spacing: 0; font-size: 0.9em;">')
+        html_out.append('<table border="1" class="dataframe" style="border: none; border-collapse: collapse; border-spacing: 0; font-size: 0.9em;">')
         
         # Header
-        html.append('<thead><tr style="text-align: right;">')
+        html_out.append('<thead><tr style="text-align: right;">')
         for h in self.headers:
-            html.append(f'<th style="padding: 5px 10px;">{h}</th>')
-        html.append('</tr></thead>')
+            safe_header = html.escape(str(h))
+            html_out.append(f'<th style="padding: 5px 10px;">{safe_header}</th>')
+        html_out.append('</tr></thead>')
 
         # Body
-        html.append('<tbody>')
+        html_out.append('<tbody>')
         for i, row in enumerate(self.rows):
             if is_truncated and i == split_idx:
-                html.append(f'<tr><td colspan="{len(self.headers)}" style="text-align:center; font-style:italic;">...</td></tr>')
+                # The ellipsis is hardcoded safe HTML
+                html_out.append(f'<tr><td colspan="{len(self.headers)}" style="text-align:center; font-style:italic;">...</td></tr>')
             
-            html.append('<tr>')
+            html_out.append('<tr>')
             for val in row:
-                s_val = self._format_value(val)
-                html.append(f'<td style="padding: 5px 10px;">{s_val}</td>')
-            html.append('</tr>')
-        html.append('</tbody></table>')
+                # Format value first (precision, etc.), then Escape it
+                raw_val = self._format_value(val)
+                safe_val = html.escape(raw_val)
+                
+                html_out.append(f'<td style="padding: 5px 10px;">{safe_val}</td>')
+            html_out.append('</tr>')
+        html_out.append('</tbody></table>')
         
         if is_truncated:
-            html.append(f'<p style="font-size: 0.8em; color: var(--vscode-descriptionForeground, #666); margin-top: 5px;">{self.total_rows} rows x {len(self.headers)} columns</p>')
-        html.append('</div>')
+            html_out.append(f'<p style="font-size: 0.8em; color: var(--vscode-descriptionForeground, #666); margin-top: 5px;">{self.total_rows} rows x {len(self.headers)} columns</p>')
+        html_out.append('</div>')
         
-        return "".join(html)
+        return "".join(html_out)
 
     def __repr__(self):
         return self._format_ascii()
