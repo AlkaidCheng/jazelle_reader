@@ -2,10 +2,12 @@
 User-facing JazelleFile class.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from .jazelle_cython import JazelleFile as _JazelleFileCython
+from .jazelle_cython import JazelleEvent
 from .streamers.base import Streamer
 from .converters import dict_to_awkward
+from .utils import TableDisplay
 
 # Import streamers to ensure registration and access explicit classes
 from .streamers import ParquetStreamer, HDF5Streamer, JSONStreamer, FeatherStreamer
@@ -27,6 +29,139 @@ class JazelleFile(_JazelleFileCython):
     ...     # Save to Parquet with compression
     ...     f.to_parquet("output.parquet", compression="zstd")
     """
+
+    def display(self, start: int = 0, count: int = 5, banks: Optional[List[str]] = None):
+        """
+        Display a summary table of events.
+        
+        Parameters
+        ----------
+        start : int
+            Start index. Negative values count from the end.
+        count : int
+            Number of events to display.
+        banks : list[str], optional
+            If provided, adds columns showing the *count* of items in these 
+            banks for each event (e.g. ['MCPART'] shows 'n_MCPART').
+        """
+        total = len(self)
+        
+        if start < 0:
+            start += total
+    
+        if start < 0:
+            start = 0
+        elif start >= total:
+            start = total
+
+        remaining = total - start
+        if count > remaining:
+            count = remaining
+        if count < 0:
+            count = 0
+
+        if count == 0:
+            title = "Events (Empty)"
+        else:
+            end_idx = start + count - 1
+            title = f"Events [{start + 1} - {end_idx + 1}]"
+
+        return self._make_header_table(start, count, title, banks=banks)
+
+    def head(self, n: int = 5, banks: Optional[List[str]] = None):
+        """
+        Display header information for the first n events.
+        
+        Parameters
+        ----------
+        n : int
+            Number of events.
+        banks : list[str], optional
+            Additional bank families to show counts for.
+        """
+        return self.display(start=0, count=n, banks=banks)
+
+    def tail(self, n: int = 5, banks: Optional[List[str]] = None):
+        """
+        Display header information for the last n events.
+        """
+        total = len(self)
+        start = max(0, total - n)
+        return self.display(start=start, count=n, banks=banks)
+
+    def info(self, banks: Optional[List[str]] = None):
+        """
+        Print summary of file metadata and available bank types.
+        
+        Parameters
+        ----------
+        banks : list[str], optional
+            If provided, only lists these banks if they are supported.
+        """
+        meta = self.metadata
+        print("-" * 40)
+        print(f"JazelleFile Info")
+        print("-" * 40)
+        print(f"File         : {meta.get('filename')}")
+        print(f"Events       : {len(self)}")
+        print(f"Created      : {meta.get('creation_date')}")
+        print(f"Record Type  : {meta.get('last_record_type')}")
+        
+        # Concurrency info
+        threads = self.num_threads
+        t_str = "Auto" if threads == 0 else str(threads)
+        print(f"Par. Threads : {t_str}")
+        print("-" * 40)
+        
+        # Bank Info
+        print("Supported Bank Families:")
+        known = JazelleEvent.getKnownBankNames()
+        known.sort()
+        
+        if banks:
+            # Filter
+            target = set(b.upper() for b in banks)
+            known = [k for k in known if k in target]
+            
+        # Print in columns
+        # Simple chunking for display
+        chunk_size = 4
+        for i in range(0, len(known), chunk_size):
+            print("  " + ", ".join(f"{k:<10}" for k in known[i:i+chunk_size]))
+        print("-" * 40)
+
+    def _make_header_table(self, start: int, count: int, title: str, banks: Optional[List[str]] = None):
+        """Internal helper to build the display table."""
+        events = self.read_batch(start=start, count=count)
+        
+        # Base headers from IEVENTH
+        headers = ['id', 'run', 'event', 'evttime', 'weight']
+        
+        # Add dynamic headers for bank counts if requested
+        bank_cols = []
+        if banks:
+            for b in banks:
+                bank_cols.append(b.upper())
+                headers.append(f"n_{b.upper()}")
+
+        rows = []
+        for evt in events:
+            h = evt.ieventh.to_dict()
+            row = []
+            for col in headers:
+                if col.startswith("n_"):
+                    b_name = col[2:].upper()
+                    try:
+                        fam = evt.getFamily(b_name)
+                        row.append(len(fam))
+                    except Exception:
+                        row.append(0) # Bank not present in this event
+                else:
+                    row.append(h.get(col))
+            
+            rows.append(row)
+            
+        return TableDisplay(headers, rows, title=title)
 
     def to_arrays(
         self, 

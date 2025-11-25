@@ -21,6 +21,8 @@ from .jazelle_cython import (
     PHKLUS, PHWIC, PHCRID, PHKTRK, PHKELID
 )
 
+from .config import display, set_display_options
+
 def open(filename: str, **kwargs) -> JazelleFile:
     """
     Open a Jazelle file for reading.
@@ -56,5 +58,8 @@ __all__ = [
     # Banks
     'IEVENTH', 'MCHEAD', 'MCPART', 'PHPSUM', 'PHCHRG', 
     'PHKLUS', 'PHWIC', 'PHCRID', 'PHKTRK', 'PHKELID',
-    'PIDVEC', 'CRIDHYP'
+    'PIDVEC', 'CRIDHYP',
+
+    # Config
+    'display', 'set_display_options'
 ]
