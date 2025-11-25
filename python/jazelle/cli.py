@@ -168,7 +168,7 @@ def handle_convert(args):
 
     try:
         
-        with jazelle.open(args.input, num_threads=args.threads) as f:
+        with jazelle.open(args.input) as f:
             f.save(
                 args.output,
                 start=args.start,
