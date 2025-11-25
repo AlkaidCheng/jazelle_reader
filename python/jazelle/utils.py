@@ -315,12 +315,7 @@ class TableDisplay:
             if is_row_truncated and i == row_split_idx:
                 lines.append("..." .center(len(header_str)))
             
-            row_parts = []
-            for idx in visible_indices:
-                if idx == -1:
-                    row_parts.append("...")
-                else:
-                    row_parts.append(f"{row_data[idx]:<{col_widths[idx]}}")
+            row_parts = ["..." if idx == -1 else f"{row_data[idx]:<{col_widths[idx]}}" for idx in visible_indices]
             
             lines.append(" | ".join(row_parts))
 
