@@ -358,7 +358,7 @@ class TableDisplay:
         html = ['<div style="overflow: auto; font-family: sans-serif;">']
         
         if self.title:
-            # UPDATED STYLE: Matches EventSummaryDisplay (uppercase, bold, opacity)
+            # Title styling: uppercase, bold, and reduced opacity for consistency with event headers and to establish visual hierarchy.
             html.append(
                 f'<div style="margin-bottom: 8px; font-weight: bold; text-transform: uppercase; font-size: 0.85em; opacity: 0.8;">'
                 f'{self.title}'
