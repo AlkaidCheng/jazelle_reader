@@ -1,4 +1,4 @@
-# jazelle_reader
+# Jazelle Reader
 
 [![Publish to PyPI](https://github.com/AlkaidCheng/jazelle_reader/actions/workflows/build_and_publish.yml/badge.svg)](https://github.com/AlkaidCheng/jazelle_reader/actions/workflows/build_and_publish.yml)
 [![PyPI version](https://img.shields.io/pypi/v/jazelle.svg)](https://pypi.org/project/jazelle/)
