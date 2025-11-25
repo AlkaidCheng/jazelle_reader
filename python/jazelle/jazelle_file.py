@@ -37,19 +37,35 @@ class JazelleFile(_JazelleFileCython):
         Parameters
         ----------
         start : int
-            Start index.
+            Start index. Negative values count from the end.
         count : int
-            Number of events.
+            Number of events to display.
         banks : list[str], optional
             If provided, adds columns showing the *count* of items in these 
             banks for each event (e.g. ['MCPART'] shows 'n_MCPART').
         """
         total = len(self)
-        # Validate bounds
-        if start < 0: start = 0
-        if count > total: count = total
         
-        title = f"Events [{start} - {start+count-1}]"
+        if start < 0:
+            start += total
+    
+        if start < 0:
+            start = 0
+        elif start >= total:
+            start = total
+
+        remaining = total - start
+        if count > remaining:
+            count = remaining
+        if count < 0:
+            count = 0
+
+        if count == 0:
+            title = "Events (Empty)"
+        else:
+            end_idx = start + count - 1
+            title = f"Events [{start + 1} - {end_idx + 1}]"
+
         return self._make_header_table(start, count, title, banks=banks)
 
     def head(self, n: int = 5, banks: Optional[List[str]] = None):
