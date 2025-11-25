@@ -131,17 +131,17 @@ class JazelleFile(_JazelleFileCython):
         rows = []
         for evt in events:
             h = evt.ieventh.to_dict()
-            row = [h.get(col) for col in headers if col not in [f"n_{b}" for b in bank_cols]]
-            
-            # Fetch bank counts
-            if banks:
-                for b_name in bank_cols:
+            row = []
+            for col in headers:
+                if col.startswith("n_"):
+                    b_name = col[2:].upper()
                     try:
-                        # We use getFamily to check existence safely
                         fam = evt.getFamily(b_name)
                         row.append(len(fam))
                     except Exception:
                         row.append(0) # Bank not present in this event
+                else:
+                    row.append(h.get(col))
             
             rows.append(row)
             
