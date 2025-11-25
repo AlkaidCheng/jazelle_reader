@@ -107,27 +107,6 @@ class JazelleFile(_JazelleFileCython):
         print(f"Created      : {meta.get('creation_date')}")
         print(f"Record Type  : {meta.get('last_record_type')}")
         
-        # Concurrency info
-        threads = self.num_threads
-        t_str = "Auto" if threads == 0 else str(threads)
-        print(f"Par. Threads : {t_str}")
-        print("-" * 40)
-        
-        # Bank Info
-        print("Supported Bank Families:")
-        known = JazelleEvent.getKnownBankNames()
-        known.sort()
-        
-        if banks:
-            # Filter
-            target = set(b.upper() for b in banks)
-            known = [k for k in known if k in target]
-            
-        # Print in columns
-        # Simple chunking for display
-        chunk_size = 4
-        for i in range(0, len(known), chunk_size):
-            print("  " + ", ".join(f"{k:<10}" for k in known[i:i+chunk_size]))
         print("-" * 40)
 
     def _make_header_table(self, start: int, count: int, title: str, banks: Optional[List[str]] = None):
