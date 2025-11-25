@@ -115,6 +115,12 @@ namespace jazelle
         std::string getLastRecordType() const;
 
         /**
+         * @brief Gets the format of the *last read* record.
+         * @return The format string (e.g., "MINIDST").
+         */
+        std::string getLastFormat() const;
+
+        /**
          * @brief Rewinds the file pointer to the first event.
          */
         void rewind();

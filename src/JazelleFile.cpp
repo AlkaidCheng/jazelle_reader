@@ -407,6 +407,11 @@ namespace jazelle
         return m_impl->lastRecordType;
     }
 
+    std::string JazelleFile::getLastFormat() const
+    {
+        return m_impl->lastFormat;
+    }
+
     void JazelleFile::rewind()
     {
         m_impl->stream->rewind();
