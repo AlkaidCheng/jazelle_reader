@@ -105,7 +105,7 @@ class JazelleFile(_JazelleFileCython):
         print(f"File         : {meta.get('filename')}")
         print(f"Events       : {len(self)}")
         print(f"Created      : {meta.get('creation_date')}")
-        print(f"Record Type  : {meta.get('last_record_type')}")
+        print(f"Modified     : {meta.get('modified_date')}")
         
         print("-" * 40)
 

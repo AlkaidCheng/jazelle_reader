@@ -3285,6 +3285,7 @@ cdef class JazelleFile:
             - creation_date: ISO 8601 formatted string
             - modified_date: ISO 8601 formatted string
             - last_record_type: Type of the last record processed
+            - last_format: Format of the last record processed
         """
         def fmt_date(dt):
             return dt.isoformat() if dt else None
@@ -3293,7 +3294,8 @@ cdef class JazelleFile:
             'filename': self.fileName,
             'creation_date': fmt_date(self.creationDate),
             'modified_date': fmt_date(self.modifiedDate),
-            'last_record_type': self.lastRecordType
+            'last_record_type': self.lastRecordType,
+            'last_format': self.lastFormat
         }
 
 # ==============================================================================
