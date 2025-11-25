@@ -2604,7 +2604,7 @@ cdef class JazelleEvent:
         
         return data
 
-    def display(self, list banks=None):
+    def display(self, List banks=None):
         """
         Display the event summary, optionally filtering by bank families.
         
