@@ -24,6 +24,9 @@ from libcpp.utility cimport pair
 from libcpp.chrono cimport system_clock, to_time_t
 from libcpp.utility cimport move
 
+from jazelle.utils import TableDisplay
+from jazelle.config import display as global_display
+
 # --- NumPy Setup ---
 import numpy as np
 cimport numpy as cnp
@@ -242,6 +245,54 @@ cdef class Family:
             Dictionary mapping attribute names to numpy arrays.
         """
         return self._wrapper_class.bulk_extract(self)
+
+    def __str__(self):
+        return str(self._get_table_display())
+
+    def _repr_html_(self):
+        return self._get_table_display()._repr_html_()
+
+    def _get_table_display(self):
+        """
+        Internal helper to generate TableDisplay.
+        Optimized to fetch only the rows needed for display.
+        """
+        cdef size_t total = len(self)
+        if total == 0:
+            return TableDisplay([], [], title=None, total_rows=0)
+
+        # Use global setting for max rows
+        cdef int max_rows = global_display.max_rows
+        cdef int half = max_rows // 2
+        
+        # Calculate indices to fetch (Head + Tail)
+        cdef list indices = []
+        if total <= max_rows:
+            indices = list(range(total))
+        else:
+            indices = list(range(half)) + list(range(total - half, total))
+
+        rows = []
+        headers = None
+        
+        for idx in indices:
+            bank = self[idx]
+            d = bank.to_dict()
+            
+            if headers is None:
+                headers = list(d.keys())
+                if 'id' in headers:
+                    headers.remove('id')
+                    headers.insert(0, 'id')
+            
+            rows.append([d[h] for h in headers])
+
+        return TableDisplay(
+            headers, 
+            rows, 
+            title=None, 
+            total_rows=total
+        )
 
 cdef object wrap_family(pxd.CppIFamily* ptr, JazelleEvent event, type py_class):
     cdef Family obj = Family.__new__(Family)
@@ -2427,6 +2478,9 @@ cdef class JazelleEvent:
             return f"<JazelleEvent run={self.ieventh.run} event={self.ieventh.event}>"
         except:
             return "<JazelleEvent>"
+
+    def __getitem__(self, key):
+        return self.getFamily(key)
         
     def clear(self):
         """Clears all data from the event."""
@@ -2550,6 +2604,105 @@ cdef class JazelleEvent:
         
         return data
 
+    def display(self, list banks=None):
+        """
+        Display the event summary, optionally filtering by bank families.
+        
+        Parameters
+        ----------
+        banks : list of str, optional
+            List of bank family names to include (e.g. ['MCPART', 'PHCHRG']).
+            If None, shows all present families.
+        """
+        return self._format_summary_obj(banks=banks)
+
+    def __str__(self):
+        # Default display (all banks)
+        return str(self._format_summary_obj(banks=None))
+
+    def _repr_html_(self):
+        # Default display (all banks)
+        return self._format_summary_obj(banks=None)._repr_html_()
+
+    def _format_summary_obj(self, list banks=None):
+        """Helper that returns a TableDisplay-like object or formatted HTML."""
+        
+        # 1. Header Meta-data
+        header = self.ieventh
+        meta_rows = [
+            ("Run", header.run),
+            ("Event", header.event),
+            ("Type", header.evttype),
+            ("Time", header.evttime),
+            ("Weight", header.weight)
+        ]
+        
+        # 2. Family Stats
+        fam_headers = ["Family", "Count"]
+        fam_rows = []
+        
+        all_fams = self.getFamilies()
+        
+        # Filter if requested
+        if banks is not None:
+            # Normalize input to uppercase for comparison
+            target_banks = set([b.upper() for b in banks])
+            all_fams = [f for f in all_fams if f.name in target_banks]
+            
+        for fam in all_fams:
+            fam_rows.append([fam.name, len(fam)])
+            
+        # Return a helper object that can render both
+        return EventSummaryDisplay(meta_rows, fam_headers, fam_rows)
+
+class EventSummaryDisplay:
+    """Helper class to render Event Summary in both ASCII and HTML."""
+    def __init__(self, meta, fam_headers, fam_rows):
+        self.meta = meta
+        self.fam_tbl = TableDisplay(fam_headers, fam_rows)
+        
+        # Convert meta list-of-tuples [(Key, Val)...] into a TableDisplay
+        # so it renders with the exact same style (zebra rows) as the right side.
+        # We use empty headers to simulate a property list.
+        meta_rows = [[k, v] for k, v in meta]
+        self.meta_tbl = TableDisplay(["Attribute", "Value"], meta_rows)
+        
+    def __repr__(self):
+        meta_str = ", ".join([f"{k}={v}" for k, v in self.meta])
+        return f"JazelleEvent({meta_str})\n\n{self.fam_tbl}"
+        
+    def _repr_html_(self):
+        # We render the meta table HTML but strip the <thead> for a cleaner "Property List" look
+        # or keep it if you prefer explicit column names.
+        # Here we inject a style to hide the header for the left table only to look like the screenshot.
+        meta_html = self.meta_tbl._repr_html_().replace(
+            '<thead><tr style="text-align: right;">', 
+            '<thead style="display: none;"><tr style="text-align: right;">'
+        )
+
+        return f"""
+        <div style="
+            display: flex;
+            flex-direction: row;
+            gap: 30px;
+            align-items: flex-start;
+            font-family: sans-serif;
+        ">
+            <div style="flex: 0 0 auto;">
+                <div style="margin-bottom: 8px; font-weight: bold; text-transform: uppercase; font-size: 0.85em; opacity: 0.8;">
+                    Event Header
+                </div>
+                {meta_html}
+            </div>
+            
+            <div style="flex: 0 0 auto;">
+                <div style="margin-bottom: 8px; font-weight: bold; text-transform: uppercase; font-size: 0.85em; opacity: 0.8;">
+                    Data Banks
+                </div>
+                {self.fam_tbl._repr_html_()}
+            </div>
+        </div>
+        """
 
 # ============================================================================
 # JAZELLE FILE CLASS
