@@ -207,10 +207,10 @@ with jazelle.open('data.jazelle') as f:
     event = f[42]
     
     # Slice notation
-    first_100 = f.read_parallel(start=0, count=100)
+    first_100 = f.read_batch(start=0, count=100)
     
     # Last 50 events
-    last_50 = f.read_parallel(start=len(f)-50, count=50)
+    last_50 = f.read_batch(start=len(f)-50, count=50)
 ```
 
 ## 🖥️ Command-Line Interface
