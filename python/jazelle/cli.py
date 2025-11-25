@@ -32,6 +32,11 @@ def parse_bank_patterns(patterns: Optional[List[str]]) -> Optional[List[str]]:
     
     return [b for b in known_banks if b in selected_banks_set]
 
+VALID_DISPLAY_OPTIONS = {
+    'max_rows', 'max_colwidth', 'max_columns', 'display_width',
+    'show_dimensions', 'float_precision', 'show_arrays', 'max_array_elements'
+}
+
 def parse_and_apply_display_options(options_str: Optional[str]):
     """
     Parses a display option string (e.g., "max_rows=5, show_arrays=0")
@@ -55,6 +60,11 @@ def parse_and_apply_display_options(options_str: Optional[str]):
             key, val_str = setting.split('=', 1)
             key = key.strip()
             val_str = val_str.strip()
+            
+            if key not in VALID_DISPLAY_OPTIONS:
+                print(f"Warning: Unrecognized display option '{key}'. "
+                      f"Valid options are: {', '.join(sorted(VALID_DISPLAY_OPTIONS))}.", file=sys.stderr)
+                continue
             
             try:
                 val = int(val_str)
