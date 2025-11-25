@@ -109,3 +109,17 @@ target_include_directories(jazelle_cython PRIVATE
 install(TARGETS jazelle_cython
         LIBRARY DESTINATION jazelle
         RUNTIME DESTINATION jazelle)
+
+option(BUILD_TESTS "Build unit tests" OFF)
+
+if(BUILD_TESTS)
+    enable_testing()
+    find_package(GTest REQUIRED)
+    
+    add_executable(jazelle_cpp_tests tests/cpp/test_binary_io.cpp)
+    target_link_libraries(jazelle_cpp_tests PRIVATE GTest::GTest GTest::Main)
+    # Include headers from the main library
+    target_include_directories(jazelle_cpp_tests PRIVATE include src)
+    
+    add_test(NAME core_cpp_tests COMMAND jazelle_cpp_tests)
+endif()
