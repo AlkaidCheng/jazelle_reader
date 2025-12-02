@@ -1,6 +1,7 @@
 # Jazelle Reader
 
 [![Publish to PyPI](https://github.com/AlkaidCheng/jazelle_reader/actions/workflows/build_and_publish.yml/badge.svg)](https://github.com/AlkaidCheng/jazelle_reader/actions/workflows/build_and_publish.yml)
+[![Code cov](https://codecov.io/gh/AlkaidCheng/jazelle_reader)](https://codecov.io/gh/AlkaidCheng/jazelle_reader/branch/master/graph/badge.svg)
 [![PyPI version](https://img.shields.io/pypi/v/jazelle.svg)](https://pypi.org/project/jazelle/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/jazelle.svg)](https://pypi.org/project/jazelle/)
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/jazelle.svg)](https://pypi.org/project/jazelle/)
@@ -110,6 +111,14 @@ pip install -e .
 
 **For source builds only**:
 - **C++ Compiler**: C++20 compatible (GCC ≥ 10, Clang ≥ 11, MSVC ≥ 19.29)
+
+## 📖 Tutorials
+
+We provide comprehensive Jupyter notebooks in the `examples/` directory to help you get started:
+
+- T01_Quickstart.ipynb: The basics of opening files, iterating events, inspecting headers, and exporting data.
+
+- T02_Z_Boson_Reconstruction.ipynb: A simple physics analysis demo. Learn how to reconstruct the Z boson resonance peak from lepton pairs using `awkward` arrays with `vector` and visualize it with `quickstats`.
 
 ## 🚀 Quick Start
 
@@ -452,8 +461,8 @@ Event
 | Family | Description | Key Fields |
 |--------|-------------|------------|
 | **IEVENTH** | Event header | run, event, evttime |
-| **PHPSUM** | Particle summary | ncharged, nneutral, thrust, evis |
-| **MCHEAD** | Monte Carlo header | weight, sqrts, ... |
+| **PHPSUM** | Particle summary | px, py, pz, charge |
+| **MCHEAD** | Monte Carlo header | ntot, ipx, ipy, ipz |
 | **MCPART** | MC particles | ptype, e, p[3], origin[3] |
 | **PHCHRG** | Charged tracks | charge, nhit, hlxpar[6], dhlxpar[15] |
 | **PHKLUS** | Calorimeter clusters | eraw, cth, elayer[8] |
@@ -527,10 +536,9 @@ ctest --output-on-failure
 
 ## 📖 Documentation
 
-- **Tutorial Notebook**: `examples/T01_quickstart_jazelle.ipynb` - Comprehensive beginner's guide
+- **Tutorial Notebook**: Comprehensive beginner's guide
 - **API Reference**: Full API documentation available in docstrings
 - **Benchmark Scripts**: `benchmarks/` - Performance testing code
-- **Example Scripts**: `examples/` - Usage examples
 
 ## 🤝 Contributing
 
