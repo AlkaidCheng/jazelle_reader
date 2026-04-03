@@ -1,6 +1,6 @@
 /**
  * @file PHPSUM.cpp
- * @brief Implementation of the PHPSUM bank read method.
+ * @brief Implementation of the PHPSUM bank read method. Store for particle summary.
  */
 
 #include "jazelle/banks/PHPSUM.hpp"
