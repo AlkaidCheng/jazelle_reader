@@ -13,6 +13,7 @@
 #include <iostream>
 #include <vector>
 #include <thread>
+#include <iomanip>
 
 namespace jazelle
 {
@@ -126,7 +127,7 @@ namespace jazelle
             [[maybe_unused]] int32_t lrecflgs = ctx.stream->readInt();
             [[maybe_unused]] int32_t spare1 = ctx.stream->readInt();
             [[maybe_unused]] int32_t spare2 = ctx.stream->readInt();
-                
+            
             // Read the event header
             if (usrnam == "IJEVHD")
             {
@@ -200,15 +201,18 @@ namespace jazelle
     {
         int32_t offset = 0;
     
-        auto& mcHeadFam = event.get<MCHEAD>();
-        auto& mcPartFam = event.get<MCPART>();
-        auto& phSumFam  = event.get<PHPSUM>();
-        auto& phChrgFam = event.get<PHCHRG>();
-        auto& phKlusFam = event.get<PHKLUS>();
-        auto& phWicFam  = event.get<PHWIC>();
-        auto& phCridFam = event.get<PHCRID>();
-        auto& phKtrkFam = event.get<PHKTRK>();
-        auto& phKelidFam= event.get<PHKELID>();
+        auto& mcHeadFam  = event.get<MCHEAD>();
+        auto& mcPartFam  = event.get<MCPART>();
+        auto& phSumFam   = event.get<PHPSUM>();
+        auto& phChrgFam  = event.get<PHCHRG>();
+        auto& phKlusFam  = event.get<PHKLUS>();
+        auto& phWicFam   = event.get<PHWIC>();
+        auto& phCridFam  = event.get<PHCRID>();
+        auto& phKtrkFam  = event.get<PHKTRK>();
+        auto& phKelidFam = event.get<PHKELID>();
+        auto& phPointFam = event.get<PHPOINT>();
+        auto& phKChrgFam = event.get<PHKCHRG>();
+        auto& phBmFam    = event.get<PHBM>();
     
         // Pre-allocate memory
         mcHeadFam.reserve(1); 
@@ -220,7 +224,10 @@ namespace jazelle
         phCridFam.reserve(toc.m_nPhCrid);
         phKtrkFam.reserve(toc.m_nPhKTrk);
         phKelidFam.reserve(toc.m_nPhKElId);
-    
+        phPointFam.reserve(toc.m_nPhPoint);
+        phKChrgFam.reserve(toc.m_nPhKChrg);
+        phBmFam.reserve(toc.m_nPhBm);
+
         // Read MCHead
         MCHEAD* mchead = mcHeadFam.add(1);
         offset += mchead->read(buffer, offset, event);
@@ -233,7 +240,7 @@ namespace jazelle
             MCPART* mcpart = mcPartFam.add(id);
             offset += mcpart->read(buffer, offset, event);
         }
-    
+        
         // Read PHPSUM
         for (int32_t i = 0; i < toc.m_nPhPSum; i++)
         {
@@ -242,7 +249,7 @@ namespace jazelle
             PHPSUM* phpsum = phSumFam.add(id);
             offset += phpsum->read(buffer, offset, event);
         }
-    
+        
         // Read PHCHRG
         for (int32_t i = 0; i < toc.m_nPhChrg; i++)
         {
@@ -251,7 +258,7 @@ namespace jazelle
             PHCHRG* phchrg = phChrgFam.add(id);
             offset += phchrg->read(buffer, offset, event);
         }
-    
+
         // Read PHKLUS
         for (int32_t i = 0; i < toc.m_nPhKlus; i++)
         {
@@ -260,7 +267,7 @@ namespace jazelle
             PHKLUS* phklus = phKlusFam.add(id);
             offset += phklus->read(buffer, offset, event);
         }
-    
+        
         // Read PHWIC
         for (int32_t i = 0; i < toc.m_nPhWic; i++)
         {
@@ -269,7 +276,7 @@ namespace jazelle
             PHWIC* phwic = phWicFam.add(id);
             offset += phwic->read(buffer, offset, event);
         }
-    
+
         // Read PHCRID
         for (int32_t i = 0; i < toc.m_nPhCrid; i++)
         {
@@ -277,7 +284,7 @@ namespace jazelle
             PHCRID* phcrid = phCridFam.add(id);
             offset += phcrid->read(buffer, offset, event);
         }
-    
+
         // Read PHKTRK
         for (int32_t i = 0; i < toc.m_nPhKTrk; i++)
         {
@@ -285,7 +292,7 @@ namespace jazelle
             PHKTRK* phktrk = phKtrkFam.add(id);
             offset += phktrk->read(buffer, offset, event);
         }
-    
+
         // Read PHKELID
         for (int32_t i = 0; i < toc.m_nPhKElId; i++)
         {
@@ -293,7 +300,50 @@ namespace jazelle
             PHKELID* phkelid = phKelidFam.add(id);
             offset += phkelid->read(buffer, offset, event);
         }
-    
+
+        // Read PHPOINT
+        for (int32_t i = 0; i < toc.m_nPhPoint; i++)
+        {
+            int32_t id = buffer.readInt(offset) & 0xffff;
+            PHPOINT* phpoint = phPointFam.add(id);
+            offset += phpoint->read(buffer, offset, event);
+        }
+
+        // ==========================================
+        // Read PHKCHRG (Two-Pass Relational Table)
+        // ==========================================
+        
+        // Pass 1: Main Data & Track Key
+        for (int32_t i = 0; i < toc.m_nPhKChrg; i++)
+        {
+            int32_t word = buffer.readInt(offset);
+            int32_t id = (word >> 16) & 0xffff;
+            PHKCHRG* phkchrg = phKChrgFam.add(id);
+            offset += phkchrg->read(buffer, offset, event);
+        }
+
+        // Pass 2: Cluster Key
+        for (int32_t i = 0; i < toc.m_nPhKChrg; i++)
+        {
+            // Read the second key array
+            int32_t word = buffer.readInt(offset);
+            int32_t id = (word >> 16) & 0xffff;
+            int32_t phklus_id = word & 0xffff;
+            offset += 4;
+
+            PHKCHRG* phkchrg = phKChrgFam.find(id);
+            if (phkchrg) {
+                phkchrg->phklus_id = phklus_id;
+            }
+        }
+        
+        // Read PHBM
+        for (int32_t i = 0; i < toc.m_nPhBm; i++)
+        {
+           PHBM* phbm = phBmFam.add(1);
+           offset += phbm->read(buffer, offset, event);
+        }
+        
         // Resolve MCPART parent pointers
         size_t mcpartSize = mcPartFam.size();
         for (size_t i = 0; i < mcpartSize; ++i)
@@ -308,6 +358,69 @@ namespace jazelle
                 part->parent = nullptr;
             }
         }
+    }
+
+    /**
+     * @brief Helper function to dump raw binary data for reverse engineering.
+     * @param buffer The DataBuffer containing the event data.
+     * @param start_offset The byte offset to start dumping from.
+     * @param end_offset The byte offset to stop dumping at.
+     */
+    void JazelleFile::dumpBinary(const DataBuffer& buffer, int32_t start_offset, int32_t end_offset)
+    {
+        std::cout << "\n========== UNPARSED BINARY DUMP ==========\n";
+        std::cout << "Buffer Total Size: " << buffer.size() << " bytes\n";
+        std::cout << "Start Offset:      " << start_offset << " bytes\n";
+        std::cout << "End Offset:        " << end_offset << " bytes\n";
+        
+        int32_t remaining_bytes = end_offset - start_offset;
+        
+        if (remaining_bytes <= 0) {
+            std::cout << "No bytes to dump (end_offset <= start_offset).\n";
+            std::cout << "==========================================\n\n";
+            return;
+        }
+
+        int32_t words_to_dump = remaining_bytes / 4; // 4 bytes per 32-bit word
+        
+        std::cout << "Dumping " << remaining_bytes << " bytes (" 
+                  << words_to_dump << " words)...\n";
+                  
+        // Expanded header
+        std::cout << std::left << std::setw(10) << "Offset" 
+                  << std::setw(15) << "Hex (32-bit)" 
+                  << std::setw(15) << "Int (32-bit)" 
+                  << std::setw(12) << "Upper 16"
+                  << std::setw(12) << "Lower 16"
+                  << "Float" << std::endl;
+        std::cout << "------------------------------------------------------------------------\n";
+
+        for (int i = 0; i < words_to_dump; i++) 
+        {
+            int32_t current_offset = start_offset + (i * 4);
+            
+            int32_t raw_int = buffer.readInt(current_offset);
+            float raw_float = buffer.readFloat(current_offset);
+            
+            // Extract the 16-bit halves and cast to signed shorts
+            int16_t upper_16 = static_cast<int16_t>((raw_int >> 16) & 0xffff);
+            int16_t lower_16 = static_cast<int16_t>(raw_int & 0xffff);
+
+            // 1. Offset
+            std::cout << "+" << std::left << std::setfill(' ') << std::setw(8) << (i * 4);
+            
+            // 2. Hex
+            std::cout << "0x" << std::right << std::setfill('0') << std::setw(8) 
+                      << std::hex << (uint32_t)raw_int << "        ";
+            
+            // 3. Int32, Upper16, Lower16, and Float
+            std::cout << std::left << std::setfill(' ') << std::dec
+                      << std::setw(15) << raw_int 
+                      << std::setw(12) << upper_16
+                      << std::setw(12) << lower_16
+                      << raw_float << std::endl;
+        }
+        std::cout << "==========================================\n\n";
     }
 
 
