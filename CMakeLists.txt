@@ -58,11 +58,16 @@ add_library(jazelle_reader_core STATIC
     src/banks/MCPART.cpp
     src/banks/PHCHRG.cpp
     src/banks/PHCRID.cpp
+    src/banks/PHEVCL.cpp
     src/banks/PHKELID.cpp
     src/banks/PHKLUS.cpp
+    src/banks/PHKTRK.cpp
     src/banks/PHPSUM.cpp
     src/banks/PHWIC.cpp
     src/banks/PIDVEC.cpp
+    src/banks/PHPOINT.cpp
+    src/banks/PHBM.cpp
+    src/banks/PHKCHRG.cpp
 )
 target_include_directories(jazelle_reader_core PUBLIC include src)
 

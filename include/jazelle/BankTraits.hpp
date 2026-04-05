@@ -15,4 +15,8 @@ namespace jazelle
     template<> inline constexpr std::string_view bank_name<PHCRID>  = "PHCRID";
     template<> inline constexpr std::string_view bank_name<PHKTRK>  = "PHKTRK";
     template<> inline constexpr std::string_view bank_name<PHKELID> = "PHKELID";
+    template<> inline constexpr std::string_view bank_name<PHPOINT> = "PHPOINT";
+    template<> inline constexpr std::string_view bank_name<PHKCHRG> = "PHKCHRG";
+    template<> inline constexpr std::string_view bank_name<PHBM>    = "PHBM";
+    template<> inline constexpr std::string_view bank_name<PHEVCL>  = "PHEVCL";
 }

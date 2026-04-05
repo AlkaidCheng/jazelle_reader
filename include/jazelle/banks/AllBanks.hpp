@@ -22,6 +22,10 @@
 #include "PHCRID.hpp"
 #include "PHKTRK.hpp"
 #include "PHKELID.hpp"
+#include "PHBM.hpp"
+#include "PHPOINT.hpp"
+#include "PHEVCL.hpp"
+#include "PHKCHRG.hpp"
 
 // ... Add any other banks referenced in PHMTOC.hpp here ...
 // (We have covered all banks referenced in MINIDST.java)
