@@ -1,11 +1,9 @@
 /**
  * @file CRIDHYP.hpp
- * @brief Helper struct for CRID hypotheses (LIQ/GAS).
+ * @brief Helper struct for Cherenkov Ring Imaging Detector (CRID) hypotheses.
  *
- * Corresponds to CRIDHYP.java. This struct is variable-sized
- * depending on whether it's a "full" hypothesis or not.
- *
- * @see hep.sld.jazelle.family.CRIDHYP
+ * This struct evaluates particle identification 
+ * (PID) by counting expected vs. found photons in either the Liquid or Gas radiators.
  */
 
 #pragma once
@@ -16,8 +14,8 @@
 
 namespace jazelle
 {
-    class DataBuffer; // Forward-declaration
-
+    class DataBuffer;
+    
     /**
      * @struct CRIDHYP
      * @brief A struct holding CRID hypothesis data.
@@ -25,40 +23,21 @@ namespace jazelle
      */
     struct CRIDHYP
     {
-        // --- Member Variables ---
-        // Public for easy access, populated by read()
-        
-        bool m_full; ///< Was this read as a "full" hypothesis?
-        
-        /// Likelihood vector (only present if m_full is true)
+        bool m_full; ///< True if the full 36-byte hypothesis is present, False if just 4 bytes
+
+        /// Log-likelihood vector for (e, mu, pi, k, p) - only present if m_full is true
         std::optional<PIDVEC> llik;
         
-        int16_t rc;
-        int16_t nhits;
-        int32_t besthyp;
-        int16_t nhexp;
-        int16_t nhfnd;
-        int16_t nhbkg;
-        int16_t mskphot;
+        int16_t rc;       ///< Return Code / Status flag for the CRID reconstruction
+        int16_t nhits;    ///< Total number of Cherenkov photons (hits) associated with this ring
+        int32_t besthyp;  ///< Best particle hypothesis ID (e.g., matching PDG codes or internal PID)
+        int16_t nhexp;    ///< Number of expected hits for the best hypothesis
+        int16_t nhfnd;    ///< Number of expected hits actually found
+        int16_t nhbkg;    ///< Number of hits attributed to background noise
+        int16_t mskphot;  ///< Bitmask of photons masked out or shared with other tracks
 
-        /**
-         * @brief Default constructor.
-         */
         CRIDHYP() = default;
 
-        /**
-         * @brief Reads the hypothesis data from the buffer.
-         *
-         * This method implements the variable-length logic from the Java
-         * original. It populates all member variables based on the 'full' flag.
-         *
-         * @param data The raw data buffer.
-         * @param offset The starting offset for this data.
-         * @param full Whether to read the full 36-byte or 4-byte version.
-         * @return The number of bytes read (36 or 4).
-         * @see hep.sld.jazelle.family.CRIDHYP#read(DataBuffer, int, boolean)
-         */
         int32_t read(const DataBuffer& data, int32_t offset, bool full);
     };
-
 } // namespace jazelle

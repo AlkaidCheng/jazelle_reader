@@ -1,54 +1,38 @@
 /**
  * @file PHCRID.hpp
- * @brief Definition of the PHCRID (Cerenkov Ring Imaging Detector) bank.
+ * @brief Definition of the PHCRID (Cherenkov Ring Imaging Detector) bank.
  *
- * This is a variable-length bank that contains LIQ and/or GAS
- * hypothesis data (CRIDHYP).
- *
- * @see hep.sld.jazelle.family.PHCRID
+ * Links a charged track to its Cherenkov rings, providing particle ID 
+ * likelihoods for both the Liquid (pi/K separation at low p) and 
+ * Gas (pi/K/p separation at high p) radiators.
  */
 
 #pragma once
 
 #include "../Bank.hpp"
-#include "CRIDHYP.hpp" // Includes PIDVEC.hpp
+#include "CRIDHYP.hpp" 
 #include <cstdint>
 
 namespace jazelle
 {
-    class DataBuffer; // Forward-declaration
-    class JazelleEvent; // Forward-declaration
+    class DataBuffer;
+    class JazelleEvent;
 
-    /**
-     * @struct PHCRID
-     * @brief The Cerenkov Ring Imaging Detector bank (variable-length).
-     */
     struct PHCRID : public Bank
     {
-        // --- Member Variables ---
-        int32_t ctlword; // Control word read at the start
-        float   norm;    // Normalization value
-        int16_t rc;
-        int16_t geom;
-        int16_t trkp;
-        int16_t nhits;
+        int32_t ctlword; ///< Control word defining which sub-components (Liq/Gas) were successfully read
+        float   norm;    ///< Normalization factor for the likelihood calculations
+        int16_t rc;      ///< Global return code/status of the CRID reconstruction for this track
+        int16_t geom;    ///< Geometry region flag (e.g., Barrel vs. Endcap)
+        int16_t trkp;    ///< Track momentum bin/flag used during ring resolution
+        int16_t nhits;   ///< Total CRID hits (Liquid + Gas) associated with the track
         
-        CRIDHYP liq;     ///< LIQ hypothesis data
-        CRIDHYP gas;     ///< GAS hypothesis data
-        PIDVEC  llik;    ///< Combined likelihood vector
+        CRIDHYP liq;     ///< Hypothesis data for the Liquid radiator (low momentum PID)
+        CRIDHYP gas;     ///< Hypothesis data for the Gas radiator (high momentum PID)
+        PIDVEC  llik;    ///< Final combined Log-Likelihoods (e, mu, pi, k, p) from both radiators
 
-        /**
-         * @brief Constructor.
-         * @param id The bank's unique ID.
-         */
         explicit PHCRID(int32_t id) : Bank(id) {}
 
-        /**
-         * @brief Reads the bank's data from the DataBuffer.
-         * @return The number of bytes read (variable).
-         * @see hep.sld.jazelle.family.PHCRID#read(DataBuffer, int)
-         */
         int32_t read(const DataBuffer& buffer, int32_t offset, JazelleEvent& event) override;
     };
-
 } // namespace jazelle

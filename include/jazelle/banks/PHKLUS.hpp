@@ -2,7 +2,8 @@
  * @file PHKLUS.hpp
  * @brief Definition of the PHKLUS (Calorimeter Cluster) bank.
  *
- * @see hep.sld.jazelle.family.PHKLUS
+ * Represents an isolated grouping of energy deposited in the Liquid Argon 
+ * Calorimeter (LAC)
  */
 
 #pragma once
@@ -13,46 +14,39 @@
 
 namespace jazelle
 {
-    class DataBuffer; // Forward-declaration
-    class JazelleEvent; // Forward-declaration
+    class DataBuffer; 
+    class JazelleEvent;
 
-    /**
-     * @struct PHKLUS
-     * @brief The Calorimeter Cluster bank.
-     */
     struct PHKLUS : public Bank
     {
-        // --- Member Variables ---
-        int32_t status;
-        float   eraw;
-        float   cth;
-        float   wcth;
-        float   phi;
-        float   wphi;
-        std::array<float, 8> elayer; // elayer(0-7)
-        int32_t nhit2;
-        float   cth2;
-        float   wcth2;
-        float   phi2;
-        float   whphi2; // Note: Java name wHphi2, likely typo
-        int32_t nhit3;
-        float   cth3;
-        float   wcth3;
-        float   phi3;
-        float   wphi3;
+        int32_t status;  ///< Cluster quality and region status (e.g., barrel vs endcap)
+        float   eraw;    ///< Raw, uncalibrated energy sum of the cluster
         
-        /**
-         * @brief Constructor.
-         * @param id The bank's unique ID.
-         */
+        // --- Global Centroid ---
+        float   cth;     ///< Cosine(theta) of the geometric cluster centroid
+        float   wcth;    ///< Energy-weighted cosine(theta) of the centroid
+        float   phi;     ///< Geometric azimuthal angle
+        float   wphi;    ///< Energy-weighted azimuthal angle
+        
+        // --- Longitudinal Profile ---
+        std::array<float, 8> elayer; ///< Energy deposited in each specific calorimeter depth layer (EM1, EM2, HAD1, etc.)
+        
+        // --- Sub-Cluster (EM section) ---
+        int32_t nhit2;   ///< Number of hits in the electromagnetic sections
+        float   cth2;    ///< Geometric cosine(theta) of the EM sub-cluster
+        float   wcth2;   ///< Energy-weighted cosine(theta) of the EM sub-cluster
+        float   phi2;    ///< Geometric phi of the EM sub-cluster
+        float   whphi2;  ///< Energy-weighted phi of the EM sub-cluster
+        
+        // --- Sub-Cluster (Hadronic section) ---
+        int32_t nhit3;   ///< Number of hits in the hadronic sections
+        float   cth3;    ///< Geometric cosine(theta) of the HAD sub-cluster
+        float   wcth3;   ///< Energy-weighted cosine(theta) of the HAD sub-cluster
+        float   phi3;    ///< Geometric phi of the HAD sub-cluster
+        float   wphi3;   ///< Energy-weighted phi of the HAD sub-cluster
+        
         explicit PHKLUS(int32_t id) : Bank(id) {}
 
-        /**
-         * @brief Reads the bank's data from the DataBuffer.
-         * @return The number of bytes read (96).
-         * @see hep.sld.jazelle.family.PHKLUS#read(DataBuffer, int)
-         */
         int32_t read(const DataBuffer& buffer, int32_t offset, JazelleEvent& event) override;
     };
-
 } // namespace jazelle
