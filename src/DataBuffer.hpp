@@ -89,6 +89,14 @@ namespace jazelle
             }
         }
 
+        /**
+         * @brief Returns the total size of the buffer in bytes.
+         */
+        size_t size() const
+        {
+            return m_span.size();
+        }
+
     private:
         /**
          * @brief Checks if a read is within the buffer bounds.
