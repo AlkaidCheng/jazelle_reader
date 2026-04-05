@@ -148,6 +148,25 @@ cdef extern from "jazelle/banks/PHKELID.hpp" namespace "jazelle":
         float emphi, emtheta, phiwid, thewid
         float em1x1, em2x2a, em2x2b, em3x3a, em3x3b
 
+cdef extern from "jazelle/banks/PHPOINT.hpp" namespace "jazelle":
+    cdef cppclass CppPHPOINT "jazelle::PHPOINT"(CppBank):
+        CppPHPOINT(int32_t)
+        int32_t phpsum_id, phchrg_id, phklus_id, phkelid_id, phwic_id, phcrid_id
+
+cdef extern from "jazelle/banks/PHKCHRG.hpp" namespace "jazelle":
+    cdef cppclass CppPHKCHRG "jazelle::PHKCHRG"(CppBank):
+        CppPHKCHRG(int32_t)
+        int32_t phchrg_id, phklus_id
+        float match_distance, delta_phi, delta_theta
+
+cdef extern from "jazelle/banks/PHBM.hpp" namespace "jazelle":
+    cdef cppclass CppPHBM "jazelle::PHBM"(CppBank):
+        CppPHBM(int32_t)
+        float ecm, decm
+        float pos[3]
+        float dpos[6]
+        float pol, dpol
+
 # --- Main Event Container ---
 
 cdef extern from "jazelle/JazelleEvent.hpp" namespace "jazelle":

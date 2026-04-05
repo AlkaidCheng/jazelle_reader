@@ -35,11 +35,7 @@ namespace jazelle
          * @return The number of bytes read (0).
          * @see hep.sld.jazelle.family.PHKTRK#read(DataBuffer, int)
          */
-        int32_t read(const DataBuffer& buffer, int32_t offset, JazelleEvent& event) override
-        {
-            // This is a stub bank in the original Java code.
-            return 0;
-        }
+        int32_t read(const DataBuffer& buffer, int32_t offset, JazelleEvent& event) override;
     };
 
 } // namespace jazelle

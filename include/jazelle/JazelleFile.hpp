@@ -173,8 +173,16 @@ namespace jazelle
          * @brief Parse MINIDST data buffer into event
          */
         static void parseMiniDst(const PHMTOC& toc, JazelleEvent& event, 
-                                const DataBuffer& buffer);
+                                 const DataBuffer& buffer);
 
+        /**
+         * @brief Helper function to dump raw binary data for reverse engineering.
+         * @param buffer The DataBuffer containing the event data.
+         * @param start_offset The byte offset to start dumping from.
+         * @param end_offset The byte offset to stop dumping at.
+         */
+        static void dumpBinary(const DataBuffer& buffer, int32_t start_offset,
+                               int32_t end_offset);
 
     private:
         /**
