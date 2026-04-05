@@ -2453,6 +2453,327 @@ cdef class PHKELID(Bank):
             'em1x1': r_em1x1, 'em2x2a': r_em2x2a, 'em2x2b': r_em2x2b, 'em3x3a': r_em3x3a, 'em3x3b': r_em3x3b
         }
 
+cdef class PHPOINT(Bank):
+    """Wrapper for PHPOINT (Pointers to Particle Information) Bank."""
+    def __init__(self): raise TypeError("No direct instantiation")
+
+    def __repr__(self):
+        p = <pxd.CppPHPOINT*>self._ptr
+        return f"<PHPOINT id={p.getId()}>"
+
+    cpdef dict to_dict(self):
+        cdef pxd.CppPHPOINT* ptr = <pxd.CppPHPOINT*>self._ptr
+        return {
+            'id': ptr.getId(),
+            'phpsum_id': ptr.phpsum_id, 'phchrg_id': ptr.phchrg_id,
+            'phklus_id': ptr.phklus_id, 'phkelid_id': ptr.phkelid_id,
+            'phwic_id': ptr.phwic_id, 'phcrid_id': ptr.phcrid_id
+        }
+
+    @staticmethod
+    def bulk_extract(Family family):
+        cdef size_t count = len(family)
+        cdef pxd.CppIFamily* fam_ptr = family._ptr
+        
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_id = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_phpsum = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_phchrg = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_phklus = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_phkelid = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_phwic = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_phcrid = np.empty(count, dtype=np.int32)
+
+        cdef size_t i
+        cdef pxd.CppPHPOINT* ptr
+        cdef int32_t* r_id = <int32_t*>arr_id.data
+        cdef int32_t* r_phpsum = <int32_t*>arr_phpsum.data
+        cdef int32_t* r_phchrg = <int32_t*>arr_phchrg.data
+        cdef int32_t* r_phklus = <int32_t*>arr_phklus.data
+        cdef int32_t* r_phkelid = <int32_t*>arr_phkelid.data
+        cdef int32_t* r_phwic = <int32_t*>arr_phwic.data
+        cdef int32_t* r_phcrid = <int32_t*>arr_phcrid.data
+
+        for i in range(count):
+            ptr = <pxd.CppPHPOINT*>fam_ptr.at(i)
+            r_id[i] = ptr.getId()
+            r_phpsum[i] = ptr.phpsum_id
+            r_phchrg[i] = ptr.phchrg_id
+            r_phklus[i] = ptr.phklus_id
+            r_phkelid[i] = ptr.phkelid_id
+            r_phwic[i] = ptr.phwic_id
+            r_phcrid[i] = ptr.phcrid_id
+
+        return {
+            'id': arr_id, 'phpsum_id': arr_phpsum, 'phchrg_id': arr_phchrg,
+            'phklus_id': arr_phklus, 'phkelid_id': arr_phkelid, 
+            'phwic_id': arr_phwic, 'phcrid_id': arr_phcrid
+        }
+
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppPHPOINT]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_phpsum = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_phchrg = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_phklus = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_phkelid = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_phwic = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_phcrid = np.empty(total, dtype=np.int32)
+
+        cdef int32_t* p_id = <int32_t*>r_id.data
+        cdef int32_t* p_phpsum = <int32_t*>r_phpsum.data
+        cdef int32_t* p_phchrg = <int32_t*>r_phchrg.data
+        cdef int32_t* p_phklus = <int32_t*>r_phklus.data
+        cdef int32_t* p_phkelid = <int32_t*>r_phkelid.data
+        cdef int32_t* p_phwic = <int32_t*>r_phwic.data
+        cdef int32_t* p_phcrid = <int32_t*>r_phcrid.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppPHPOINT]* fam
+        cdef pxd.CppPHPOINT* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppPHPOINT]()
+            for j in range(fam.size()):
+                b = <pxd.CppPHPOINT*>fam.at(j)
+                p_id[g_idx] = b.getId()
+                p_phpsum[g_idx] = b.phpsum_id
+                p_phchrg[g_idx] = b.phchrg_id
+                p_phklus[g_idx] = b.phklus_id
+                p_phkelid[g_idx] = b.phkelid_id
+                p_phwic[g_idx] = b.phwic_id
+                p_phcrid[g_idx] = b.phcrid_id
+                g_idx += 1
+
+        return {
+            '_offsets': arr_offsets, 'id': r_id,
+            'phpsum_id': r_phpsum, 'phchrg_id': r_phchrg,
+            'phklus_id': r_phklus, 'phkelid_id': r_phkelid,
+            'phwic_id': r_phwic, 'phcrid_id': r_phcrid
+        }
+
+
+cdef class PHKCHRG(Bank):
+    """Wrapper for PHKCHRG (Track-Cluster Matching) Bank."""
+    def __init__(self): raise TypeError("No direct instantiation")
+
+    def __repr__(self):
+        p = <pxd.CppPHKCHRG*>self._ptr
+        return f"<PHKCHRG id={p.getId()} track={p.phchrg_id} klus={p.phklus_id}>"
+
+    cpdef dict to_dict(self):
+        cdef pxd.CppPHKCHRG* ptr = <pxd.CppPHKCHRG*>self._ptr
+        return {
+            'id': ptr.getId(), 'phchrg_id': ptr.phchrg_id, 'phklus_id': ptr.phklus_id,
+            'match_distance': ptr.match_distance, 'delta_phi': ptr.delta_phi, 'delta_theta': ptr.delta_theta
+        }
+
+    @staticmethod
+    def bulk_extract(Family family):
+        cdef size_t count = len(family)
+        cdef pxd.CppIFamily* fam_ptr = family._ptr
+        
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_id = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_phchrg = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_phklus = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_mdist = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_dphi = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_dtheta = np.empty(count, dtype=np.float32)
+
+        cdef size_t i
+        cdef pxd.CppPHKCHRG* ptr
+        cdef int32_t* r_id = <int32_t*>arr_id.data
+        cdef int32_t* r_phchrg = <int32_t*>arr_phchrg.data
+        cdef int32_t* r_phklus = <int32_t*>arr_phklus.data
+        cdef float* r_mdist = <float*>arr_mdist.data
+        cdef float* r_dphi = <float*>arr_dphi.data
+        cdef float* r_dtheta = <float*>arr_dtheta.data
+
+        for i in range(count):
+            ptr = <pxd.CppPHKCHRG*>fam_ptr.at(i)
+            r_id[i] = ptr.getId()
+            r_phchrg[i] = ptr.phchrg_id
+            r_phklus[i] = ptr.phklus_id
+            r_mdist[i] = ptr.match_distance
+            r_dphi[i] = ptr.delta_phi
+            r_dtheta[i] = ptr.delta_theta
+
+        return {
+            'id': arr_id, 'phchrg_id': arr_phchrg, 'phklus_id': arr_phklus,
+            'match_distance': arr_mdist, 'delta_phi': arr_dphi, 'delta_theta': arr_dtheta
+        }
+
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppPHKCHRG]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_phchrg = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_phklus = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_mdist = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_dphi = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_dtheta = np.empty(total, dtype=np.float32)
+
+        cdef int32_t* p_id = <int32_t*>r_id.data
+        cdef int32_t* p_phchrg = <int32_t*>r_phchrg.data
+        cdef int32_t* p_phklus = <int32_t*>r_phklus.data
+        cdef float* p_mdist = <float*>r_mdist.data
+        cdef float* p_dphi = <float*>r_dphi.data
+        cdef float* p_dtheta = <float*>r_dtheta.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppPHKCHRG]* fam
+        cdef pxd.CppPHKCHRG* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppPHKCHRG]()
+            for j in range(fam.size()):
+                b = <pxd.CppPHKCHRG*>fam.at(j)
+                p_id[g_idx] = b.getId()
+                p_phchrg[g_idx] = b.phchrg_id
+                p_phklus[g_idx] = b.phklus_id
+                p_mdist[g_idx] = b.match_distance
+                p_dphi[g_idx] = b.delta_phi
+                p_dtheta[g_idx] = b.delta_theta
+                g_idx += 1
+
+        return {
+            '_offsets': arr_offsets, 'id': r_id, 
+            'phchrg_id': r_phchrg, 'phklus_id': r_phklus,
+            'match_distance': r_mdist, 'delta_phi': r_dphi, 'delta_theta': r_dtheta
+        }
+
+
+cdef class PHBM(Bank):
+    """Wrapper for PHBM (Beam Information) Bank."""
+    def __init__(self): raise TypeError("No direct instantiation")
+
+    def __repr__(self):
+        p = <pxd.CppPHBM*>self._ptr
+        return f"<PHBM id={p.getId()} ecm={p.ecm:.2f} pol={p.pol:.2f}>"
+
+    cpdef dict to_dict(self):
+        cdef pxd.CppPHBM* ptr = <pxd.CppPHBM*>self._ptr
+        return {
+            'id': ptr.getId(), 'ecm': ptr.ecm, 'decm': ptr.decm,
+            'pol': ptr.pol, 'dpol': ptr.dpol,
+            'pos': [ptr.pos[i] for i in range(3)],
+            'dpos': [ptr.dpos[i] for i in range(6)]
+        }
+
+    @staticmethod
+    def bulk_extract(Family family):
+        cdef size_t count = len(family)
+        cdef pxd.CppIFamily* fam_ptr = family._ptr
+        
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_id = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_ecm = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_decm = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_pol = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_dpol = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] arr_pos = np.empty((count, 3), dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] arr_dpos = np.empty((count, 6), dtype=np.float32)
+
+        cdef size_t i
+        cdef pxd.CppPHBM* ptr
+        cdef int32_t* r_id = <int32_t*>arr_id.data
+        cdef float* r_ecm = <float*>arr_ecm.data
+        cdef float* r_decm = <float*>arr_decm.data
+        cdef float* r_pol = <float*>arr_pol.data
+        cdef float* r_dpol = <float*>arr_dpol.data
+        cdef float* r_pos = <float*>arr_pos.data
+        cdef float* r_dpos = <float*>arr_dpos.data
+
+        for i in range(count):
+            ptr = <pxd.CppPHBM*>fam_ptr.at(i)
+            r_id[i] = ptr.getId()
+            r_ecm[i] = ptr.ecm
+            r_decm[i] = ptr.decm
+            r_pol[i] = ptr.pol
+            r_dpol[i] = ptr.dpol
+            memcpy(r_pos + i*3, &ptr.pos[0], 3 * sizeof(float))
+            memcpy(r_dpos + i*6, &ptr.dpos[0], 6 * sizeof(float))
+
+        return {
+            'id': arr_id, 'ecm': arr_ecm, 'decm': arr_decm, 
+            'pol': arr_pol, 'dpol': arr_dpol,
+            'pos': arr_pos, 'dpos': arr_dpos
+        }
+
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppPHBM]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_ecm = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_decm = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_pol = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_dpol = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_pos = np.empty((total, 3), dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_dpos = np.empty((total, 6), dtype=np.float32)
+
+        cdef int32_t* p_id = <int32_t*>r_id.data
+        cdef float* p_ecm = <float*>r_ecm.data
+        cdef float* p_decm = <float*>r_decm.data
+        cdef float* p_pol = <float*>r_pol.data
+        cdef float* p_dpol = <float*>r_dpol.data
+        cdef float* p_pos = <float*>r_pos.data
+        cdef float* p_dpos = <float*>r_dpos.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppPHBM]* fam
+        cdef pxd.CppPHBM* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppPHBM]()
+            for j in range(fam.size()):
+                b = <pxd.CppPHBM*>fam.at(j)
+                p_id[g_idx] = b.getId()
+                p_ecm[g_idx] = b.ecm
+                p_decm[g_idx] = b.decm
+                p_pol[g_idx] = b.pol
+                p_dpol[g_idx] = b.dpol
+                memcpy(p_pos + (g_idx*3), &b.pos[0], 12)
+                memcpy(p_dpos + (g_idx*6), &b.dpos[0], 24)
+                g_idx += 1
+
+        return {
+            '_offsets': arr_offsets, 'id': r_id, 
+            'ecm': r_ecm, 'decm': r_decm, 'pol': r_pol, 'dpol': r_dpol,
+            'pos': r_pos, 'dpos': r_dpos
+        }
+
 
 # ==============================================================================
 # JazelleEvent Wrapper
@@ -2507,6 +2828,12 @@ cdef class JazelleEvent:
     def phktrk(self): return wrap_family(&self.cpp_event.get[pxd.CppPHKTRK](), self, PHKTRK)
     @property
     def phkelid(self): return wrap_family(&self.cpp_event.get[pxd.CppPHKELID](), self, PHKELID)
+    @property
+    def phpoint(self): return wrap_family(&self.cpp_event.get[pxd.CppPHPOINT](), self, PHPOINT)
+    @property
+    def phkchrg(self): return wrap_family(&self.cpp_event.get[pxd.CppPHKCHRG](), self, PHKCHRG)
+    @property
+    def phbm(self): return wrap_family(&self.cpp_event.get[pxd.CppPHBM](), self, PHBM)
 
     def getFamily(self, identifier):
         """
@@ -3328,6 +3655,9 @@ cdef void _init_extractors():
     register_extractor(b"PHCRID",  PHCRID.extract_from_vector)
     register_extractor(b"PHKTRK",  PHKTRK.extract_from_vector)
     register_extractor(b"PHKELID",  PHKELID.extract_from_vector)
+    register_extractor(b"PHPOINT",  PHPOINT.extract_from_vector)
+    register_extractor(b"PHKCHRG",  PHKCHRG.extract_from_vector)
+    register_extractor(b"PHBM",  PHBM.extract_from_vector)
 
 # Run initialization immediately
 _register_wrappers()
