@@ -680,10 +680,10 @@ If you use this package in your research, please cite:
 
 ```bibtex
 @software{jazelle_reader,
-  author = {Cheng, Alkaid},
+  author = {Cheng, Chi Lung},
   title = {jazelle\_reader: A Modern Python Reader for SLD Jazelle Files},
   year = {2025},
-  url = {https://github.com/AlkaidCheng/jazelle_reader},
+  url = {https://github.com/HEP-KE/jazelle_reader},
   note = {High-performance C++20 implementation with Python bindings for
           legacy particle physics data analysis}
 }
