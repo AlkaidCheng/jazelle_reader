@@ -11,6 +11,7 @@ from libc.stdint cimport int16_t, int32_t, int64_t, uint8_t
 from libcpp.chrono cimport system_clock, time_point
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
+from libcpp.unordered_map cimport unordered_map
 
 cdef extern from "jazelle/Family.hpp" namespace "jazelle":
     
@@ -42,6 +43,28 @@ cdef extern from "jazelle/banks/CRIDHYP.hpp" namespace "jazelle":
         int16_t nhexp, nhfnd, nhbkg, mskphot
         optional[CppPIDVEC] llik
 
+cdef extern from "jazelle/PHMTOC.hpp" namespace "jazelle":
+    cdef cppclass CppPHMTOC "jazelle::PHMTOC":
+        CppPHMTOC()
+        float   m_version
+        int32_t m_nMcPart
+        int32_t m_nPhPSum
+        int32_t m_nPhChrg
+        int32_t m_nPhKlus
+        int32_t m_nPhKTrk
+        int32_t m_nPhWic
+        int32_t m_nPhWMC
+        int32_t m_nPhCrid
+        int32_t m_nPhPoint
+        int32_t m_nMcPnt
+        int32_t m_nPhKMC1
+        int32_t m_nPhKChrg
+        int32_t m_nPhBm
+        int32_t m_nPhEvCl
+        int32_t m_nMcBeam
+        int32_t m_nPhKElId
+        int32_t m_nPhVxOv
+        
 # --- Bank Structs (from banks/*.hpp) ---
 # We must declare all bank structs we want to wrap.
 
@@ -202,6 +225,9 @@ cdef extern from "jazelle/JazelleFile.hpp" namespace "jazelle":
         string getLastRecordType()
         string getLastFormat()
         void rewind() except +
+        
+        bint hasToc() except +
+        CppPHMTOC getToc() except +
 
         vector[uint8_t] dumpBinary(int32_t start_offset,
                                    int32_t end_offset) except +
@@ -210,8 +236,22 @@ cdef extern from "jazelle/JazelleFile.hpp" namespace "jazelle":
         void printBinary(int32_t start_offset,
                          int32_t end_offset) except +
 
+        bint loadEventBuffer() except +
+        bint loadEventBuffer(int32_t index) except +
+
+        unordered_map[string, int32_t] getBankFamilyOffsets() except +
+        int32_t getBankFamilyOffset(const string& familyName) except +
+
         vector[CppJazelleEvent] readEventsBatch(
             int32_t start_idx,
             int32_t count,
             size_t num_threads
         ) except +
+
+cdef extern from "DataBuffer.hpp" namespace "jazelle":
+    cdef cppclass CppDataBuffer "jazelle::DataBuffer":
+        CppDataBuffer()
+        void setData(const uint8_t[:] data)
+        int32_t readInt(int32_t offset) except +
+        float readFloat(int32_t offset) except +
+        size_t size()

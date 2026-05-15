@@ -19,6 +19,7 @@
 #include <memory>
 #include <chrono>
 #include <functional>
+#include <unordered_map>
 
 namespace jazelle
 {
@@ -82,6 +83,38 @@ namespace jazelle
          * @return true if the event was read, false if index is out of bounds.
          */
         bool readEvent(int32_t index, JazelleEvent& event);
+
+        /**
+         * @brief Load the next record's data buffer without parsing the
+         *        MINIDST payload.
+         *
+         * Advances the stream to the next logical record, reads the logical
+         * record header, IEVENTH, PHMTOC, and the raw data block, but stops
+         * before decoding the data block into typed banks. Useful when
+         * MINIDST parsing fails on a particular event and you still want to
+         * inspect the raw bytes.
+         *
+         * After this call, the data buffer accessible via dumpBinary() /
+         * dumpBinaryText() / printBinary() corresponds to this record, and
+         * getBankFamilyOffset(s)() can be used to locate bank families
+         * within it.
+         *
+         * The stream is left in the same position it would be in after a
+         * successful nextRecord(), so subsequent sequential reads are not
+         * affected.
+         *
+         * @return true on success, false on EOF.
+         */
+        bool loadEventBuffer();
+
+        /**
+         * @brief Same as loadEventBuffer(), but for the event at a specific
+         *        index (uses the event index, building it if needed).
+         *
+         * @param index 0-based event index.
+         * @return true on success, false if index is out of range.
+         */
+        bool loadEventBuffer(int32_t index);
 
         // --- File Metadata Accessors ---
 
@@ -169,10 +202,19 @@ namespace jazelle
         static bool parseEvent(ParseContext& ctx, JazelleEvent& event);
         
         /**
-         * @brief Parse MINIDST data buffer into event
+         * @brief Parse MINIDST data buffer into event.
+         * @param toc Table of contents (bank counts).
+         * @param event Event to populate.
+         * @param buffer Data buffer to read from.
+         * @param family_offsets If non-null, will be populated with a map of
+         *        family name (e.g. "PHCHRG") to its starting byte offset
+         *        within the buffer. This allows offset discovery without
+         *        keeping the parsed event.
          */
-        static void parseMiniDst(const PHMTOC& toc, JazelleEvent& event, 
-                                 const DataBuffer& buffer);
+        static void parseMiniDst(const PHMTOC& toc, JazelleEvent& event,
+                                 const DataBuffer& buffer,
+                                 std::unordered_map<std::string, int32_t>*
+                                     family_offsets = nullptr);
 
         /**
          * @brief Returns the raw binary data of the current event's data buffer.
@@ -213,6 +255,56 @@ namespace jazelle
          */
         void printBinary(int32_t start_offset = 0,
                          int32_t end_offset = -1) const;
+
+        /**
+         * @brief Compute the starting byte offset of every bank family in
+         *        the currently loaded data buffer.
+         *
+         * Requires that a buffer has been loaded via nextRecord(),
+         * readEvent(), or loadEventBuffer(). Returns a map of family name
+         * (e.g. "MCHEAD", "PHCHRG", "PHBM") to its starting byte offset.
+         *
+         * If the buffer is malformed and walking fails partway, any
+         * families reached before the failure are still returned (missing
+         * keys indicate the walk could not reach them).
+         *
+         * @return Map of family name -> byte offset.
+         * @throws std::runtime_error if no MINIDST buffer is currently
+         *         loaded.
+         */
+        std::unordered_map<std::string, int32_t> getBankFamilyOffsets() const;
+
+        /**
+         * @brief Get the starting byte offset of a specific bank family.
+         *
+         * @param familyName Family name, e.g. "PHCHRG", "MCPART".
+         * @return Starting byte offset within the data buffer.
+         * @throws std::runtime_error if no buffer is loaded, if the family
+         *         name is not a known family, or if walking could not reach
+         *         it due to a malformed buffer.
+         */
+        int32_t getBankFamilyOffset(const std::string& familyName) const;
+
+        // --- MINIDST TOC accessor ---
+
+        /**
+         * @brief Check whether a valid MINIDST TOC is currently cached.
+         *
+         * Returns true after a successful nextRecord(), readEvent(), or
+         * loadEventBuffer() on a MINIDST record. Returns false before any
+         * load, or when the most recent record was not MINIDST.
+         */
+        bool hasToc() const;
+
+        /**
+         * @brief Get the PHMTOC (Table of Contents) of the most recently
+         *        loaded MINIDST record.
+         *
+         * @return The cached PHMTOC (by value).
+         * @throws std::runtime_error if no MINIDST buffer is currently
+         *         loaded (use hasToc() to test first).
+         */
+        PHMTOC getToc() const;
 
     private:
         /**
