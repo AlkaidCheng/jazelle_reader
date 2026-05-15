@@ -19,7 +19,6 @@
 #include <memory>
 #include <chrono>
 #include <functional>
-#include <unordered_map>
 
 namespace jazelle
 {
