@@ -622,6 +622,61 @@ namespace jazelle
         return m_impl->readCurrentBufferOnly();
     }
 
+    // --- Bank family offsets ---
+
+    std::unordered_map<std::string, int32_t>
+    JazelleFile::getBankFamilyOffsets() const
+    {
+        if (!m_impl->lastTocValid)
+        {
+            throw std::runtime_error(
+                "No MINIDST buffer is currently loaded. Call nextRecord(), "
+                "readEvent(), or loadEventBuffer() first."
+            );
+        }
+
+        std::unordered_map<std::string, int32_t> offsets;
+        JazelleEvent scratch; // Discarded; only needed for read() signatures.
+
+        try {
+            JazelleFile::parseMiniDst(
+                m_impl->lastToc, scratch, m_impl->dataBufferView, &offsets);
+        }
+        catch (...) {
+            // Swallow: a malformed buffer leaves us with the offsets we
+            // managed to record. Missing keys signal where the walk
+            // stopped.
+        }
+        return offsets;
+    }
+
+    int32_t
+    JazelleFile::getBankFamilyOffset(const std::string& familyName) const
+    {
+        // Known set of families that parseMiniDst walks.
+        static const std::set<std::string> kKnownFamilies = {
+            "MCHEAD", "MCPART", "MCPNT", "PHPSUM", "PHCHRG", "PHKLUS", "PHWIC",
+            "PHCRID", "PHKTRK", "PHKELID", "PHPOINT", "PHKCHRG", "PHBM", "PHWMC"
+        };
+
+        if (!kKnownFamilies.count(familyName)) {
+            throw std::runtime_error(
+                "Unknown bank family: '" + familyName + "'."
+            );
+        }
+
+        const auto offsets = getBankFamilyOffsets();
+        auto it = offsets.find(familyName);
+        if (it == offsets.end()) {
+            throw std::runtime_error(
+                "Bank family '" + familyName + "' could not be located in "
+                "the current buffer (the walker stopped before reaching it, "
+                "likely due to a malformed earlier family)."
+            );
+        }
+        return it->second;
+    }
+
     // --- Accessors ---
 
     std::string JazelleFile::getFileName() const

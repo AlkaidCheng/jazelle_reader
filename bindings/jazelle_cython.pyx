@@ -23,6 +23,7 @@ from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 from libcpp.chrono cimport system_clock, to_time_t
 from libcpp.utility cimport move
+from libcpp.unordered_map cimport unordered_map
 
 from jazelle.utils import TableDisplay
 from jazelle.config import display as global_display
@@ -3754,6 +3755,76 @@ cdef class JazelleFile:
         if index is None:
             return self.cpp_obj.get().loadEventBuffer()
         return self.cpp_obj.get().loadEventBuffer(<int32_t>index)
+
+
+    # ========================================================================
+    # Bank family offsets in the current buffer
+    # ========================================================================
+
+    def getBankFamilyOffset(self, str family_name) -> int:
+        """
+        Get the starting byte offset of a specific bank family in the
+        currently loaded data buffer.
+
+        Requires that a buffer has been loaded via ``nextRecord()``,
+        ``readEvent()``, indexing (``f[i]``), or ``loadEventBuffer()``.
+
+        Parameters
+        ----------
+        family_name : str
+            One of: 'MCHEAD', 'MCPART', 'PHPSUM', 'PHCHRG', 'PHKLUS',
+            'PHWIC', 'PHCRID', 'PHKTRK', 'PHKELID', 'PHPOINT', 'PHKCHRG',
+            'PHBM'.
+
+        Returns
+        -------
+        int
+            Starting byte offset within the data buffer.
+
+        Raises
+        ------
+        RuntimeError
+            If no buffer is loaded, the family name is unknown, or the
+            walker could not reach the family due to a malformed buffer.
+        """
+        cdef string s = family_name.encode('UTF-8')
+        return self.cpp_obj.get().getBankFamilyOffset(s)
+
+    def getBankFamilyOffsets(self) -> dict:
+        """
+        Get a dict mapping every bank family name to its starting byte
+        offset in the currently loaded data buffer.
+
+        If the buffer is malformed and the walker fails partway, families
+        that were reached before the failure are still returned — missing
+        keys indicate where parsing stopped.
+
+        Returns
+        -------
+        dict[str, int]
+            Mapping family name -> starting byte offset.
+
+        Raises
+        ------
+        RuntimeError
+            If no MINIDST buffer is currently loaded.
+
+        Examples
+        --------
+        >>> with JazelleFile('data.jazelle') as f:
+        ...     event = f[0]
+        ...     for name, off in sorted(f.getBankFamilyOffsets().items(),
+        ...                             key=lambda x: x[1]):
+        ...         print(f"{name:8s} @ {off}")
+        """
+        cdef unordered_map[string, int32_t] cpp_offsets = \
+            self.cpp_obj.get().getBankFamilyOffsets()
+        cdef dict result = {}
+        cdef unordered_map[string, int32_t].iterator it = cpp_offsets.begin()
+        while it != cpp_offsets.end():
+            result[(<bytes>deref(it).first).decode('UTF-8')] = deref(it).second
+            inc(it)
+        return result
 
 # ==============================================================================
 # Initialization

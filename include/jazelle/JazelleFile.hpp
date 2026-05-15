@@ -19,6 +19,7 @@
 #include <memory>
 #include <chrono>
 #include <functional>
+#include <unordered_map>
 
 namespace jazelle
 {
@@ -254,6 +255,35 @@ namespace jazelle
          */
         void printBinary(int32_t start_offset = 0,
                          int32_t end_offset = -1) const;
+
+        /**
+         * @brief Compute the starting byte offset of every bank family in
+         *        the currently loaded data buffer.
+         *
+         * Requires that a buffer has been loaded via nextRecord(),
+         * readEvent(), or loadEventBuffer(). Returns a map of family name
+         * (e.g. "MCHEAD", "PHCHRG", "PHBM") to its starting byte offset.
+         *
+         * If the buffer is malformed and walking fails partway, any
+         * families reached before the failure are still returned (missing
+         * keys indicate the walk could not reach them).
+         *
+         * @return Map of family name -> byte offset.
+         * @throws std::runtime_error if no MINIDST buffer is currently
+         *         loaded.
+         */
+        std::unordered_map<std::string, int32_t> getBankFamilyOffsets() const;
+
+        /**
+         * @brief Get the starting byte offset of a specific bank family.
+         *
+         * @param familyName Family name, e.g. "PHCHRG", "MCPART".
+         * @return Starting byte offset within the data buffer.
+         * @throws std::runtime_error if no buffer is loaded, if the family
+         *         name is not a known family, or if walking could not reach
+         *         it due to a malformed buffer.
+         */
+        int32_t getBankFamilyOffset(const std::string& familyName) const;
 
     private:
         /**

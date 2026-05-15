@@ -11,6 +11,7 @@ from libc.stdint cimport int16_t, int32_t, int64_t, uint8_t
 from libcpp.chrono cimport system_clock, time_point
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
+from libcpp.unordered_map cimport unordered_map
 
 cdef extern from "jazelle/Family.hpp" namespace "jazelle":
     
@@ -41,7 +42,7 @@ cdef extern from "jazelle/banks/CRIDHYP.hpp" namespace "jazelle":
         int32_t besthyp
         int16_t nhexp, nhfnd, nhbkg, mskphot
         optional[CppPIDVEC] llik
-
+        
 # --- Bank Structs (from banks/*.hpp) ---
 # We must declare all bank structs we want to wrap.
 
@@ -213,8 +214,19 @@ cdef extern from "jazelle/JazelleFile.hpp" namespace "jazelle":
         bint loadEventBuffer() except +
         bint loadEventBuffer(int32_t index) except +
 
+        unordered_map[string, int32_t] getBankFamilyOffsets() except +
+        int32_t getBankFamilyOffset(const string& familyName) except +
+
         vector[CppJazelleEvent] readEventsBatch(
             int32_t start_idx,
             int32_t count,
             size_t num_threads
         ) except +
+
+cdef extern from "DataBuffer.hpp" namespace "jazelle":
+    cdef cppclass CppDataBuffer "jazelle::DataBuffer":
+        CppDataBuffer()
+        void setData(const uint8_t[:] data)
+        int32_t readInt(int32_t offset) except +
+        float readFloat(int32_t offset) except +
+        size_t size()
