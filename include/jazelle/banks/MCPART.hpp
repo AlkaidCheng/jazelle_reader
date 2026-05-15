@@ -2,6 +2,7 @@
 
 #include "../Bank.hpp"
 #include <cstdint>
+#include <cmath>
 
 namespace jazelle
 {
