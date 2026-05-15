@@ -2920,13 +2920,13 @@ cdef class PHBM(Bank):
             'pos': r_pos, 'dpos': r_dpos
         }
 
-cdef class PHKWMC(Bank):
-    """Wrapper for PHKWMC bank.
+cdef class PHWMC(Bank):
+    """Wrapper for PHWMC bank.
 
-    The PHKWMC template has not been sourced yet, so semantic field
+    The PHWMC template has not been sourced yet, so semantic field
     names are partial. The byte layout is solid: 20-byte fixed prefix
     plus n_pairs * 8-byte pair entries. Downstream banks (MCPNT, etc.)
-    parse cleanly once the offset is advanced past PHKWMC.
+    parse cleanly once the offset is advanced past PHWMC.
 
     Fields:
       word1, word2     : prefix fields whose purpose is not yet known
@@ -2937,22 +2937,22 @@ cdef class PHKWMC(Bank):
     def __init__(self): raise TypeError("No direct instantiation")
 
     def __repr__(self):
-        p = <pxd.CppPHKWMC*>self._ptr
-        return (f"<PHKWMC id={p.getId()} n_pairs={p.n_pairs} "
+        p = <pxd.CppPHWMC*>self._ptr
+        return (f"<PHWMC id={p.getId()} n_pairs={p.n_pairs} "
                 f"total_count={p.total_count}>")
 
     @property
-    def word1(self): return (<pxd.CppPHKWMC*>self._ptr).word1
+    def word1(self): return (<pxd.CppPHWMC*>self._ptr).word1
     @property
-    def word2(self): return (<pxd.CppPHKWMC*>self._ptr).word2
+    def word2(self): return (<pxd.CppPHWMC*>self._ptr).word2
     @property
-    def total_count(self): return (<pxd.CppPHKWMC*>self._ptr).total_count
+    def total_count(self): return (<pxd.CppPHWMC*>self._ptr).total_count
     @property
-    def n_pairs(self): return (<pxd.CppPHKWMC*>self._ptr).n_pairs
+    def n_pairs(self): return (<pxd.CppPHWMC*>self._ptr).n_pairs
 
     @property
     def pairs(self):
-        cdef pxd.CppPHKWMC* p = <pxd.CppPHKWMC*>self._ptr
+        cdef pxd.CppPHWMC* p = <pxd.CppPHWMC*>self._ptr
         cdef size_t i, n = p.pairs.size()
         return [
             {'count': p.pairs[i].count,
@@ -2962,7 +2962,7 @@ cdef class PHKWMC(Bank):
         ]
 
     cpdef dict to_dict(self):
-        cdef pxd.CppPHKWMC* p = <pxd.CppPHKWMC*>self._ptr
+        cdef pxd.CppPHWMC* p = <pxd.CppPHWMC*>self._ptr
         return {
             'id': p.getId(),
             'word1': p.word1,

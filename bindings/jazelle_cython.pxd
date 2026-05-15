@@ -199,16 +199,16 @@ cdef extern from "jazelle/banks/PHBM.hpp" namespace "jazelle":
         float dpos[6]
         float pol, dpol
 
-cdef extern from "jazelle/banks/PHKWMC.hpp" namespace "jazelle":
-    cdef struct CppPHKWMCPair "jazelle::PHKWMCPair":
+cdef extern from "jazelle/banks/PHWMC.hpp" namespace "jazelle":
+    cdef struct CppPHWMCPair "jazelle::PHWMCPair":
         uint16_t count
         uint16_t id
         int32_t  value
 
-    cdef cppclass CppPHKWMC "jazelle::PHKWMC"(CppBank):
-        CppPHKWMC(int32_t)
+    cdef cppclass CppPHWMC "jazelle::PHWMC"(CppBank):
+        CppPHWMC(int32_t)
         int32_t word1, word2, total_count, n_pairs
-        vector[CppPHKWMCPair] pairs
+        vector[CppPHWMCPair] pairs
 
 # --- Main Event Container ---
 
