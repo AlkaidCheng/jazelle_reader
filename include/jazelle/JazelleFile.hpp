@@ -285,6 +285,27 @@ namespace jazelle
          */
         int32_t getBankFamilyOffset(const std::string& familyName) const;
 
+        // --- MINIDST TOC accessor ---
+
+        /**
+         * @brief Check whether a valid MINIDST TOC is currently cached.
+         *
+         * Returns true after a successful nextRecord(), readEvent(), or
+         * loadEventBuffer() on a MINIDST record. Returns false before any
+         * load, or when the most recent record was not MINIDST.
+         */
+        bool hasToc() const;
+
+        /**
+         * @brief Get the PHMTOC (Table of Contents) of the most recently
+         *        loaded MINIDST record.
+         *
+         * @return The cached PHMTOC (by value).
+         * @throws std::runtime_error if no MINIDST buffer is currently
+         *         loaded (use hasToc() to test first).
+         */
+        PHMTOC getToc() const;
+
     private:
         /**
          * @struct Impl

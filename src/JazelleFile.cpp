@@ -677,6 +677,22 @@ namespace jazelle
         return it->second;
     }
 
+    bool JazelleFile::hasToc() const
+    {
+        return m_impl->lastTocValid;
+    }
+
+    PHMTOC JazelleFile::getToc() const
+    {
+        if (!m_impl->lastTocValid) {
+            throw std::runtime_error(
+                "No MINIDST TOC is currently available. Call nextRecord(), "
+                "readEvent(), or loadEventBuffer() first."
+            );
+        }
+        return m_impl->lastToc;
+    }
+
     // --- Accessors ---
 
     std::string JazelleFile::getFileName() const
