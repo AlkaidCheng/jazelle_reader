@@ -69,6 +69,7 @@ add_library(jazelle_reader_core STATIC
     src/banks/PHPOINT.cpp
     src/banks/PHBM.cpp
     src/banks/PHKCHRG.cpp
+    src/banks/PHWMC.cpp
 )
 target_include_directories(jazelle_reader_core PUBLIC include src)
 

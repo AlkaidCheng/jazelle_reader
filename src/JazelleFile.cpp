@@ -260,6 +260,7 @@ namespace jazelle
         auto& phPointFam = event.get<PHPOINT>();
         auto& phKChrgFam = event.get<PHKCHRG>();
         auto& phBmFam    = event.get<PHBM>();
+        auto& phWMCFam   = event.get<PHWMC>();
 
         mcHeadFam.reserve(1);
         mcPartFam.reserve(toc.m_nMcPart);
@@ -274,6 +275,7 @@ namespace jazelle
         phPointFam.reserve(toc.m_nPhPoint);
         phKChrgFam.reserve(toc.m_nPhKChrg);
         phBmFam.reserve(toc.m_nPhBm);
+        phWMCFam.reserve(toc.m_nPhWMC);
 
         // Helper to record offsets concisely
         #define RECORD_FAMILY_OFFSET(name) \
@@ -379,6 +381,14 @@ namespace jazelle
             int32_t id = buffer.readInt(offset) & 0xffff;
             PHPOINT* phpoint = phPointFam.add(id);
             offset += phpoint->read(buffer, offset, event);
+        }
+
+        // PHWMC — variable-size: 20 + 8*n_pairs bytes per bank
+        RECORD_FAMILY_OFFSET("PHWMC");
+        for (int32_t i = 0; i < toc.m_nPhWMC; ++i) {
+            const int32_t bank_id = buffer.readInt(offset);   // bank_id is at +0
+            PHWMC* b = phWMCFam.add(bank_id);
+            offset += b->read(buffer, offset, event);
         }
 
         // Read MCPNT (two-pass: Pass 1 in MCPART-key order, Pass 2 in PHPOINT-key order)
@@ -682,7 +692,7 @@ namespace jazelle
         // Known set of families that parseMiniDst walks.
         static const std::set<std::string> kKnownFamilies = {
             "MCHEAD", "MCPART", "MCPNT", "PHPSUM", "PHCHRG", "PHKLUS", "PHWIC",
-            "PHCRID", "PHKTRK", "PHKELID", "PHPOINT", "PHKCHRG", "PHBM"
+            "PHCRID", "PHKTRK", "PHKELID", "PHPOINT", "PHKCHRG", "PHBM", "PHWMC"
         };
 
         if (!kKnownFamilies.count(familyName)) {

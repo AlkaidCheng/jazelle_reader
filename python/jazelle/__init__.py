@@ -19,7 +19,7 @@ from .jazelle_cython import (
     PIDVEC, CRIDHYP,
     IEVENTH, MCHEAD, MCPART, MCPNT, PHPSUM, PHCHRG, 
     PHKLUS, PHWIC, PHCRID, PHKTRK, PHKELID,
-    PHPOINT, PHKCHRG, PHBM
+    PHPOINT, PHKCHRG, PHBM, PHWMC
 )
 
 from .config import display, set_display_options
@@ -59,7 +59,7 @@ __all__ = [
     # Banks
     'IEVENTH', 'MCHEAD', 'MCPART', 'MCPNT', 'PHPSUM', 'PHCHRG', 
     'PHKLUS', 'PHWIC', 'PHCRID', 'PHKTRK', 'PHKELID',
-    'PIDVEC', 'CRIDHYP', 'PHPOINT', 'PHKCHARG', 'PHBM'
+    'PIDVEC', 'CRIDHYP', 'PHPOINT', 'PHKCHARG', 'PHBM', 'PHWMC'
 
     # Config
     'display', 'set_display_options'

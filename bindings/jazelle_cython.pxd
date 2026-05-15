@@ -64,7 +64,7 @@ cdef extern from "jazelle/PHMTOC.hpp" namespace "jazelle":
         int32_t m_nMcBeam
         int32_t m_nPhKElId
         int32_t m_nPhVxOv
-        
+
 # --- Bank Structs (from banks/*.hpp) ---
 # We must declare all bank structs we want to wrap.
 
@@ -102,7 +102,7 @@ cdef extern from "jazelle/banks/MCPNT.hpp" namespace "jazelle":
         int32_t reason
         int32_t nhits
         float   econtrib
-        
+
 cdef extern from "jazelle/banks/PHPSUM.hpp" namespace "jazelle":
     cdef cppclass CppPHPSUM "jazelle::PHPSUM"(CppBank):
         CppPHPSUM(int32_t)
@@ -198,6 +198,17 @@ cdef extern from "jazelle/banks/PHBM.hpp" namespace "jazelle":
         float pos[3]
         float dpos[6]
         float pol, dpol
+
+cdef extern from "jazelle/banks/PHKWMC.hpp" namespace "jazelle":
+    cdef struct CppPHKWMCPair "jazelle::PHKWMCPair":
+        uint16_t count
+        uint16_t id
+        int32_t  value
+
+    cdef cppclass CppPHKWMC "jazelle::PHKWMC"(CppBank):
+        CppPHKWMC(int32_t)
+        int32_t word1, word2, total_count, n_pairs
+        vector[CppPHKWMCPair] pairs
 
 # --- Main Event Container ---
 

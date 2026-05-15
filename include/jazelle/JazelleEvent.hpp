@@ -28,7 +28,7 @@ namespace jazelle
         using BankTypes = std::tuple<
             MCHEAD, MCPART, MCPNT, PHPSUM, PHCHRG, 
             PHKLUS, PHWIC, PHCRID, PHKTRK, PHKELID,
-            PHBM, PHPOINT, PHKCHRG, PHEVCL
+            PHBM, PHPOINT, PHKCHRG, PHEVCL, PHWMC
         >;
 
         // Public Header
