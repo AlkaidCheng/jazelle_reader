@@ -89,10 +89,10 @@ cdef extern from "jazelle/banks/MCHEAD.hpp" namespace "jazelle":
 cdef extern from "jazelle/banks/MCPART.hpp" namespace "jazelle":
     cdef cppclass CppMCPART "jazelle::MCPART"(CppBank):
         CppMCPART(int32_t)
-        float e, ptot, charge
+        float px, py, pz
+        float xt_x, xt_y, xt_z
+        float e, charge
         int32_t ptype, origin, parent_id
-        float p[3]
-        float xt[3]
 
 cdef extern from "jazelle/banks/PHPSUM.hpp" namespace "jazelle":
     cdef cppclass CppPHPSUM "jazelle::PHPSUM"(CppBank):
