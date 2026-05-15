@@ -42,6 +42,28 @@ cdef extern from "jazelle/banks/CRIDHYP.hpp" namespace "jazelle":
         int32_t besthyp
         int16_t nhexp, nhfnd, nhbkg, mskphot
         optional[CppPIDVEC] llik
+
+cdef extern from "jazelle/PHMTOC.hpp" namespace "jazelle":
+    cdef cppclass CppPHMTOC "jazelle::PHMTOC":
+        CppPHMTOC()
+        float   m_version
+        int32_t m_nMcPart
+        int32_t m_nPhPSum
+        int32_t m_nPhChrg
+        int32_t m_nPhKlus
+        int32_t m_nPhKTrk
+        int32_t m_nPhWic
+        int32_t m_nPhWMC
+        int32_t m_nPhCrid
+        int32_t m_nPhPoint
+        int32_t m_nMcPnt
+        int32_t m_nPhKMC1
+        int32_t m_nPhKChrg
+        int32_t m_nPhBm
+        int32_t m_nPhEvCl
+        int32_t m_nMcBeam
+        int32_t m_nPhKElId
+        int32_t m_nPhVxOv
         
 # --- Bank Structs (from banks/*.hpp) ---
 # We must declare all bank structs we want to wrap.
@@ -203,6 +225,9 @@ cdef extern from "jazelle/JazelleFile.hpp" namespace "jazelle":
         string getLastRecordType()
         string getLastFormat()
         void rewind() except +
+        
+        bint hasToc() except +
+        CppPHMTOC getToc() except +
 
         vector[uint8_t] dumpBinary(int32_t start_offset,
                                    int32_t end_offset) except +

@@ -3032,6 +3032,206 @@ class EventSummaryDisplay:
         </div>
         """
 
+# ==============================================================================
+# PHMTOC (MINIDST Table of Contents)
+# ==============================================================================
+
+cdef class PHMTOC:
+    """
+    Table of Contents (PHMTOC) for a MINIDST record.
+
+    Holds the per-family bank counts and format version for a single event's
+    data buffer. You typically obtain one via :pyattr:`JazelleFile.toc` after
+    loading or parsing an event.
+
+    Examples
+    --------
+    >>> with JazelleFile('data.jazelle') as f:
+    ...     f.loadEventBuffer(0)
+    ...     toc = f.toc
+    ...     print(toc)               # multi-line summary
+    ...     print(toc.n_mcpart)      # 12
+    ...     toc.to_dict()['version'] # 2.0
+    """
+    # Value-owned copy of the C++ struct.
+    cdef pxd.CppPHMTOC _cpp
+
+    def __init__(self):
+        raise TypeError(
+            "Cannot instantiate PHMTOC directly; obtain it via "
+            "JazelleFile.toc."
+        )
+
+    # --- Properties ---------------------------------------------------------
+
+    @property
+    def version(self) -> float:
+        """MINIDST format version."""
+        return self._cpp.m_version
+
+    @property
+    def n_mcpart(self) -> int:
+        """Number of MCPART (Monte Carlo particle) banks."""
+        return self._cpp.m_nMcPart
+
+    @property
+    def n_phpsum(self) -> int:
+        """Number of PHPSUM (particle summary) banks."""
+        return self._cpp.m_nPhPSum
+
+    @property
+    def n_phchrg(self) -> int:
+        """Number of PHCHRG (charged track) banks."""
+        return self._cpp.m_nPhChrg
+
+    @property
+    def n_phklus(self) -> int:
+        """Number of PHKLUS (calorimeter cluster) banks."""
+        return self._cpp.m_nPhKlus
+
+    @property
+    def n_phktrk(self) -> int:
+        """Number of PHKTRK banks."""
+        return self._cpp.m_nPhKTrk
+
+    @property
+    def n_phwic(self) -> int:
+        """Number of PHWIC (Warm Iron Calorimeter / muon) banks."""
+        return self._cpp.m_nPhWic
+
+    @property
+    def n_phwmc(self) -> int:
+        """Number of PHWMC banks."""
+        return self._cpp.m_nPhWMC
+
+    @property
+    def n_phcrid(self) -> int:
+        """Number of PHCRID (Cherenkov Ring Imaging Detector) banks."""
+        return self._cpp.m_nPhCrid
+
+    @property
+    def n_phpoint(self) -> int:
+        """Number of PHPOINT (cross-reference) banks."""
+        return self._cpp.m_nPhPoint
+
+    @property
+    def n_mcpnt(self) -> int:
+        """Number of MCPNT banks."""
+        return self._cpp.m_nMcPnt
+
+    @property
+    def n_phkmc1(self) -> int:
+        """Number of PHKMC1 banks."""
+        return self._cpp.m_nPhKMC1
+
+    @property
+    def n_phkchrg(self) -> int:
+        """Number of PHKCHRG (charged-cluster relation) banks."""
+        return self._cpp.m_nPhKChrg
+
+    @property
+    def n_phbm(self) -> int:
+        """Number of PHBM (beam) banks."""
+        return self._cpp.m_nPhBm
+
+    @property
+    def n_phevcl(self) -> int:
+        """Number of PHEVCL banks."""
+        return self._cpp.m_nPhEvCl
+
+    @property
+    def n_mcbeam(self) -> int:
+        """Number of MCBEAM banks."""
+        return self._cpp.m_nMcBeam
+
+    @property
+    def n_phkelid(self) -> int:
+        """Number of PHKELID (electron ID) banks."""
+        return self._cpp.m_nPhKElId
+
+    @property
+    def n_phvxov(self) -> int:
+        """Number of PHVXOV banks."""
+        return self._cpp.m_nPhVxOv
+
+    # --- Conversion ---------------------------------------------------------
+
+    cpdef dict to_dict(self):
+        """Return all fields as a plain dict."""
+        return {
+            'version':    self._cpp.m_version,
+            'n_mcpart':   self._cpp.m_nMcPart,
+            'n_phpsum':   self._cpp.m_nPhPSum,
+            'n_phchrg':   self._cpp.m_nPhChrg,
+            'n_phklus':   self._cpp.m_nPhKlus,
+            'n_phktrk':   self._cpp.m_nPhKTrk,
+            'n_phwic':    self._cpp.m_nPhWic,
+            'n_phwmc':    self._cpp.m_nPhWMC,
+            'n_phcrid':   self._cpp.m_nPhCrid,
+            'n_phpoint':  self._cpp.m_nPhPoint,
+            'n_mcpnt':    self._cpp.m_nMcPnt,
+            'n_phkmc1':   self._cpp.m_nPhKMC1,
+            'n_phkchrg':  self._cpp.m_nPhKChrg,
+            'n_phbm':     self._cpp.m_nPhBm,
+            'n_phevcl':   self._cpp.m_nPhEvCl,
+            'n_mcbeam':   self._cpp.m_nMcBeam,
+            'n_phkelid':  self._cpp.m_nPhKElId,
+            'n_phvxov':   self._cpp.m_nPhVxOv,
+        }
+
+    # --- Display ------------------------------------------------------------
+
+    def __repr__(self):
+        return (
+            f"<PHMTOC version={self._cpp.m_version:.1f} "
+            f"n_mcpart={self._cpp.m_nMcPart} "
+            f"n_phpsum={self._cpp.m_nPhPSum} "
+            f"n_phchrg={self._cpp.m_nPhChrg} "
+            f"n_phklus={self._cpp.m_nPhKlus}>"
+        )
+
+    def __str__(self):
+        cdef dict fields = self.to_dict()
+        cdef int width = max(len(k) for k in fields)
+        lines = ["PHMTOC (MINIDST Table of Contents)"]
+        for k, v in fields.items():
+            if isinstance(v, float):
+                lines.append(f"  {k:<{width}}  {v:g}")
+            else:
+                lines.append(f"  {k:<{width}}  {v}")
+        return "\n".join(lines)
+
+    def _repr_html_(self):
+        """Rich HTML display in Jupyter notebooks."""
+        cdef dict fields = self.to_dict()
+        rows = []
+        for k, v in fields.items():
+            v_str = f"{v:g}" if isinstance(v, float) else str(v)
+            rows.append(
+                f"<tr><td style='text-align:left'><code>{k}</code></td>"
+                f"<td style='text-align:right'>{v_str}</td></tr>"
+            )
+        return (
+            "<table style='border-collapse: collapse;'>"
+            "<caption style='text-align:left; font-weight:bold; "
+            "padding-bottom:4px;'>PHMTOC "
+            "<span style='font-weight:normal; color:#888;'>"
+            "(MINIDST Table of Contents)</span></caption>"
+            "<thead><tr>"
+            "<th style='text-align:left; border-bottom:1px solid #ccc;'>Field</th>"
+            "<th style='text-align:right; border-bottom:1px solid #ccc;'>Value</th>"
+            "</tr></thead>"
+            "<tbody>" + "".join(rows) + "</tbody>"
+            "</table>"
+        )
+
+
+cdef object _make_phmtoc(pxd.CppPHMTOC cpp_toc):
+    """Internal: build a Python PHMTOC from a C++ value."""
+    cdef PHMTOC py = PHMTOC.__new__(PHMTOC)
+    py._cpp = cpp_toc
+    return py
+
 # ============================================================================
 # JAZELLE FILE CLASS
 # ============================================================================
@@ -3825,6 +4025,24 @@ cdef class JazelleFile:
             result[(<bytes>deref(it).first).decode('UTF-8')] = deref(it).second
             inc(it)
         return result
+
+    @property
+    def toc(self):
+        """
+        The PHMTOC (Table of Contents) of the most recently loaded MINIDST
+        record, or ``None`` if no MINIDST record has been loaded yet.
+
+        Populated by any of ``nextRecord()``, ``readEvent()`` / indexing,
+        or ``loadEventBuffer()``.
+
+        Returns
+        -------
+        PHMTOC or None
+        """
+        if not self.cpp_obj.get().hasToc():
+            return None
+        cdef pxd.CppPHMTOC cpp_toc = self.cpp_obj.get().getToc()
+        return _make_phmtoc(cpp_toc)
 
 # ==============================================================================
 # Initialization
