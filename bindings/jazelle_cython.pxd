@@ -7,7 +7,7 @@ from libcpp.string cimport string
 from libcpp.string_view cimport string_view
 from libcpp.memory cimport unique_ptr
 from libcpp.optional cimport optional
-from libc.stdint cimport int16_t, int32_t, int64_t, uint8_t
+from libc.stdint cimport int16_t, int32_t, int64_t, uint8_t, uint16_t
 from libcpp.chrono cimport system_clock, time_point
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair

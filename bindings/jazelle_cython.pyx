@@ -12,7 +12,7 @@ import inspect
 import cython
 import datetime
 from cython.operator cimport dereference as deref, preincrement as inc
-from libc.stdint cimport uint8_t, int16_t, int32_t
+from libc.stdint cimport uint8_t, int16_t, int32_t, uint16_t
 from libc.string cimport memcpy
 from libc.stdint cimport uintptr_t
 from libcpp.string cimport string
