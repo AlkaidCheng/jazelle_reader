@@ -385,6 +385,78 @@ namespace jazelle
         return std::vector<uint8_t>(data + start_offset, data + end_offset);
     }
 
+    std::string JazelleFile::dumpBinaryText(int32_t start_offset,
+                                            int32_t end_offset) const
+    {
+        const DataBuffer& buffer = m_impl->dataBufferView;
+        const int32_t buffer_size = static_cast<int32_t>(buffer.size());
+
+        if (end_offset < 0) {
+            end_offset = buffer_size;
+        }
+
+        std::ostringstream oss;
+        oss << "\n========== UNPARSED BINARY DUMP ==========\n"
+            << "Buffer Total Size: " << buffer_size  << " bytes\n"
+            << "Start Offset:      " << start_offset << " bytes\n"
+            << "End Offset:        " << end_offset   << " bytes\n";
+
+        const int32_t remaining_bytes = end_offset - start_offset;
+        if (remaining_bytes <= 0) {
+            oss << "No bytes to dump (end_offset <= start_offset).\n"
+                << "==========================================\n\n";
+            return oss.str();
+        }
+
+        const int32_t words_to_dump = remaining_bytes / 4; // 4-byte words
+
+        oss << "Dumping " << remaining_bytes << " bytes ("
+            << words_to_dump << " words)...\n";
+
+        // Header (same column layout as the original)
+        oss << std::left  << std::setw(10) << "Offset"
+                          << std::setw(15) << "Hex (32-bit)"
+                          << std::setw(15) << "Int (32-bit)"
+                          << std::setw(12) << "Upper 16"
+                          << std::setw(12) << "Lower 16"
+                          << "Float" << '\n';
+        oss << "------------------------------------------------------------------------\n";
+
+        for (int32_t i = 0; i < words_to_dump; ++i)
+        {
+            const int32_t current_offset = start_offset + (i * 4);
+
+            const int32_t raw_int   = buffer.readInt(current_offset);
+            const float   raw_float = buffer.readFloat(current_offset);
+
+            const int16_t upper_16 =
+                static_cast<int16_t>((raw_int >> 16) & 0xffff);
+            const int16_t lower_16 =
+                static_cast<int16_t>(raw_int & 0xffff);
+
+            // Offset
+            oss << "+" << std::left << std::setfill(' ') << std::setw(8)
+                << (i * 4);
+
+            // Hex
+            oss << "0x" << std::right << std::setfill('0') << std::setw(8)
+                << std::hex << static_cast<uint32_t>(raw_int) << "        ";
+
+            // Int32, upper16, lower16, float
+            oss << std::left << std::setfill(' ') << std::dec
+                << std::setw(15) << raw_int
+                << std::setw(12) << upper_16
+                << std::setw(12) << lower_16
+                << raw_float << '\n';
+        }
+        oss << "==========================================\n\n";
+        return oss.str();
+    }
+
+    void JazelleFile::printBinary(int32_t start_offset, int32_t end_offset) const
+    {
+        std::cout << dumpBinaryText(start_offset, end_offset);
+    }
 
     // --- Public JazelleFile Methods ---
 
