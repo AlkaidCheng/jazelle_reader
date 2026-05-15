@@ -249,6 +249,7 @@ namespace jazelle
 
         auto& mcHeadFam  = event.get<MCHEAD>();
         auto& mcPartFam  = event.get<MCPART>();
+        auto& mcPntFam  = event.get<MCPNT>();
         auto& phSumFam   = event.get<PHPSUM>();
         auto& phChrgFam  = event.get<PHCHRG>();
         auto& phKlusFam  = event.get<PHKLUS>();
@@ -259,10 +260,10 @@ namespace jazelle
         auto& phPointFam = event.get<PHPOINT>();
         auto& phKChrgFam = event.get<PHKCHRG>();
         auto& phBmFam    = event.get<PHBM>();
-    
-        // Pre-allocate memory
-        mcHeadFam.reserve(1); 
+
+        mcHeadFam.reserve(1);
         mcPartFam.reserve(toc.m_nMcPart);
+        mcPntFam.reserve(toc.m_nMcPnt);
         phSumFam.reserve(toc.m_nPhPSum);
         phChrgFam.reserve(toc.m_nPhChrg);
         phKlusFam.reserve(toc.m_nPhKlus);
@@ -380,7 +381,34 @@ namespace jazelle
             offset += phpoint->read(buffer, offset, event);
         }
 
-        // ==========================================
+        // Read MCPNT (two-pass: Pass 1 in MCPART-key order, Pass 2 in PHPOINT-key order)
+        RECORD_FAMILY_OFFSET("MCPNT");
+        // Pass 1 — 16 bytes per entry, MCPART-key traversal order
+        for (int32_t i = 0; i < toc.m_nMcPnt; i++)
+        {
+            // Peek MCPNT_id from the high 16 bits of the header word.
+            const uint32_t hdr =
+                static_cast<uint32_t>(buffer.readInt(offset));
+            const int32_t mcpnt_id = static_cast<int32_t>((hdr >> 16) & 0xffffu);
+        
+            MCPNT* mcpnt = mcPntFam.add(mcpnt_id);
+            offset += mcpnt->read(buffer, offset, event);   // returns 16
+        }
+        // Pass 2 — 4 bytes per entry, PHPOINT-key traversal order
+        for (int32_t i = 0; i < toc.m_nMcPnt; i++)
+        {
+            const uint32_t pair =
+                static_cast<uint32_t>(buffer.readInt(offset));
+            offset += 4;
+            const int32_t mcpnt_id   = static_cast<int32_t>((pair >> 16) & 0xffffu);
+            const int32_t phpoint_id = static_cast<int32_t>( pair        & 0xffffu);
+        
+            if (MCPNT* mcpnt = mcPntFam.find(mcpnt_id)) {
+                mcpnt->phpoint_id = phpoint_id;
+            }
+        }
+
+        /*
         // Read PHKCHRG (Two-Pass Relational Table)
         RECORD_FAMILY_OFFSET("PHKCHRG");
         // Pass 1: Main Data & Track Key
@@ -415,21 +443,8 @@ namespace jazelle
         }
 
         #undef RECORD_FAMILY_OFFSET
+        */
         
-        // Resolve MCPART parent pointers
-        size_t mcpartSize = mcPartFam.size();
-        for (size_t i = 0; i < mcpartSize; ++i)
-        {
-            MCPART* part = mcPartFam.at(i);
-            if (part && part->parent_id > 0)
-            {
-                part->parent = mcPartFam.find(part->parent_id);
-            }
-            else if (part)
-            {
-                part->parent = nullptr;
-            }
-        }
     }
 
     std::vector<uint8_t> JazelleFile::dumpBinary(int32_t start_offset,
@@ -609,7 +624,7 @@ namespace jazelle
     {
         if (!m_impl->stream->nextLogicalRecord())
         {
-            return false;
+            return false; // Clean EOF
         }
         return m_impl->readCurrentBufferOnly();
     }
@@ -667,7 +682,7 @@ namespace jazelle
         // Known set of families that parseMiniDst walks.
         static const std::set<std::string> kKnownFamilies = {
             "MCHEAD", "MCPART", "MCPNT", "PHPSUM", "PHCHRG", "PHKLUS", "PHWIC",
-            "PHCRID", "PHKTRK", "PHKELID", "PHPOINT", "PHKCHRG", "PHBM", "PHWMC"
+            "PHCRID", "PHKTRK", "PHKELID", "PHPOINT", "PHKCHRG", "PHBM"
         };
 
         if (!kKnownFamilies.count(familyName)) {

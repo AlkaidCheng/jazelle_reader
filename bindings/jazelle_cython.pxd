@@ -94,6 +94,15 @@ cdef extern from "jazelle/banks/MCPART.hpp" namespace "jazelle":
         float e, charge
         int32_t ptype, origin, parent_id
 
+cdef extern from "jazelle/banks/MCPNT.hpp" namespace "jazelle":
+    cdef cppclass CppMCPNT "jazelle::MCPNT"(CppBank):
+        CppMCPNT(int32_t)
+        int32_t mcpart_id
+        int32_t phpoint_id
+        int32_t reason
+        int32_t nhits
+        float   econtrib
+        
 cdef extern from "jazelle/banks/PHPSUM.hpp" namespace "jazelle":
     cdef cppclass CppPHPSUM "jazelle::PHPSUM"(CppBank):
         CppPHPSUM(int32_t)

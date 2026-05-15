@@ -865,7 +865,139 @@ cdef class MCPART(Bank):
             'origin': r_origin, 'parent_id': r_parent_id,
         }
 
+        
+cdef class MCPNT(Bank):
+    """Wrapper for MCPNT (MCPART <-> PHPOINT relational table) Bank.
 
+    Each MCPNT entry links one MCPART to one PHPOINT and records why the
+    relationship exists (REASON bitmask), how many tracking hits the
+    MCPART contributed (NHITS), and how much energy it contributed to
+    the KAL cluster (ECONTRIB).
+    """
+    def __init__(self): raise TypeError("No direct instantiation")
+
+    def __repr__(self):
+        p = <pxd.CppMCPNT*>self._ptr
+        return (f"<MCPNT id={p.getId()} mcpart={p.mcpart_id} "
+                f"phpoint={p.phpoint_id} econtrib={p.econtrib:.3f}>")
+
+    # --- Scalar properties ---
+    @property
+    def mcpart_id(self): return (<pxd.CppMCPNT*>self._ptr).mcpart_id
+    @property
+    def phpoint_id(self): return (<pxd.CppMCPNT*>self._ptr).phpoint_id
+    @property
+    def reason(self): return (<pxd.CppMCPNT*>self._ptr).reason
+    @property
+    def nhits(self): return (<pxd.CppMCPNT*>self._ptr).nhits
+    @property
+    def econtrib(self): return (<pxd.CppMCPNT*>self._ptr).econtrib
+
+    cpdef dict to_dict(self):
+        cdef pxd.CppMCPNT* ptr = <pxd.CppMCPNT*>self._ptr
+        return {
+            'id': ptr.getId(),
+            'mcpart_id': ptr.mcpart_id,
+            'phpoint_id': ptr.phpoint_id,
+            'reason': ptr.reason,
+            'nhits': ptr.nhits,
+            'econtrib': ptr.econtrib,
+        }
+
+    @staticmethod
+    def bulk_extract(Family family):
+        cdef size_t count = len(family)
+        cdef pxd.CppIFamily* fam_ptr = family._ptr
+
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_id         = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_mcpart_id  = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_phpoint_id = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_reason     = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_nhits      = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_econtrib   = np.empty(count, dtype=np.float32)
+
+        cdef int32_t* r_id         = <int32_t*>arr_id.data
+        cdef int32_t* r_mcpart_id  = <int32_t*>arr_mcpart_id.data
+        cdef int32_t* r_phpoint_id = <int32_t*>arr_phpoint_id.data
+        cdef int32_t* r_reason     = <int32_t*>arr_reason.data
+        cdef int32_t* r_nhits      = <int32_t*>arr_nhits.data
+        cdef float*   r_econtrib   = <float*>  arr_econtrib.data
+
+        cdef size_t i
+        cdef pxd.CppMCPNT* ptr
+        for i in range(count):
+            ptr = <pxd.CppMCPNT*>fam_ptr.at(i)
+            r_id[i]         = ptr.getId()
+            r_mcpart_id[i]  = ptr.mcpart_id
+            r_phpoint_id[i] = ptr.phpoint_id
+            r_reason[i]     = ptr.reason
+            r_nhits[i]      = ptr.nhits
+            r_econtrib[i]   = ptr.econtrib
+
+        return {
+            'id': arr_id,
+            'mcpart_id': arr_mcpart_id,
+            'phpoint_id': arr_phpoint_id,
+            'reason': arr_reason,
+            'nhits': arr_nhits,
+            'econtrib': arr_econtrib,
+        }
+
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppMCPNT]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_id         = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_mcpart_id  = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_phpoint_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_reason     = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_nhits      = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_econtrib   = np.empty(total, dtype=np.float32)
+
+        cdef int32_t* p_id         = <int32_t*>r_id.data
+        cdef int32_t* p_mcpart_id  = <int32_t*>r_mcpart_id.data
+        cdef int32_t* p_phpoint_id = <int32_t*>r_phpoint_id.data
+        cdef int32_t* p_reason     = <int32_t*>r_reason.data
+        cdef int32_t* p_nhits      = <int32_t*>r_nhits.data
+        cdef float*   p_econtrib   = <float*>  r_econtrib.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppMCPNT]* fam
+        cdef pxd.CppMCPNT* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppMCPNT]()
+            for j in range(fam.size()):
+                b = <pxd.CppMCPNT*>fam.at(j)
+                p_id[g_idx]         = b.getId()
+                p_mcpart_id[g_idx]  = b.mcpart_id
+                p_phpoint_id[g_idx] = b.phpoint_id
+                p_reason[g_idx]     = b.reason
+                p_nhits[g_idx]      = b.nhits
+                p_econtrib[g_idx]   = b.econtrib
+                g_idx += 1
+
+        return {
+            '_offsets': arr_offsets,
+            'id': r_id,
+            'mcpart_id': r_mcpart_id,
+            'phpoint_id': r_phpoint_id,
+            'reason': r_reason,
+            'nhits': r_nhits,
+            'econtrib': r_econtrib,
+        }
+
+        
 cdef class PHPSUM(Bank):
     """Wrapper for PHPSUM (Physics Particle Summary) Bank."""
     def __init__(self): raise TypeError("No direct instantiation")
@@ -2829,6 +2961,8 @@ cdef class JazelleEvent:
     @property
     def mcpart(self): return wrap_family(&self.cpp_event.get[pxd.CppMCPART](), self, MCPART)
     @property
+    def mcpnt(self): return wrap_family(&self.cpp_event.get[pxd.CppMCPNT](), self, MCPNT)
+    @property
     def phpsum(self): return wrap_family(&self.cpp_event.get[pxd.CppPHPSUM](), self, PHPSUM)
     @property
     def phchrg(self): return wrap_family(&self.cpp_event.get[pxd.CppPHCHRG](), self, PHCHRG)
@@ -4080,6 +4214,7 @@ cdef void _init_extractors():
     register_extractor(b"IEVENTH", IEVENTH.extract_from_vector)
     register_extractor(b"MCHEAD",  MCHEAD.extract_from_vector)
     register_extractor(b"MCPART",  MCPART.extract_from_vector)
+    register_extractor(b"MCPNT",  MCPNT.extract_from_vector)
     register_extractor(b"PHPSUM",  PHPSUM.extract_from_vector)
     register_extractor(b"PHCHRG",  PHCHRG.extract_from_vector)
     register_extractor(b"PHKLUS",  PHKLUS.extract_from_vector)
