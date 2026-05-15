@@ -210,6 +210,9 @@ cdef extern from "jazelle/JazelleFile.hpp" namespace "jazelle":
         void printBinary(int32_t start_offset,
                          int32_t end_offset) except +
 
+        bint loadEventBuffer() except +
+        bint loadEventBuffer(int32_t index) except +
+
         vector[CppJazelleEvent] readEventsBatch(
             int32_t start_idx,
             int32_t count,

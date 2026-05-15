@@ -3711,6 +3711,50 @@ cdef class JazelleFile:
         # The text already ends with "\n\n"; suppress print's extra newline.
         print(self.dumpBinaryText(start_offset, end_offset), end='')
 
+    # ========================================================================
+    # Buffer-only loading (no MINIDST parse)
+    # ========================================================================
+
+    def loadEventBuffer(self, index=None) -> bool:
+        """
+        Load an event's data buffer without parsing the MINIDST payload.
+
+        Reads the logical record header, IEVENTH, and PHMTOC, and populates
+        the internal data buffer with the raw MINIDST bytes — but stops
+        before decoding them into typed banks. Useful when MINIDST parsing
+        fails on a particular event and you still want to inspect or dump
+        the raw bytes.
+
+        After this call, ``dumpBinary()``, ``dumpBinaryText()``,
+        ``printBinary()``, and ``getBankFamilyOffset(s)()`` all operate on
+        this buffer. The stream is left in the same position it would be in
+        after a successful ``nextRecord()``, so sequential reads continue
+        normally.
+
+        Parameters
+        ----------
+        index : int or None, default None
+            - ``None``: advance to the next logical record and load it.
+            - ``int``:  seek to and load the event at this 0-based index
+              (builds the event index if needed).
+
+        Returns
+        -------
+        bool
+            ``True`` on success, ``False`` on EOF (sequential) or invalid
+            index (random access).
+
+        Examples
+        --------
+        >>> with JazelleFile('data.jazelle') as f:
+        ...     if f.loadEventBuffer(42):       # event 42 may not parse cleanly
+        ...         print(f.dumpBinaryText(0, 256))
+        ...         print(f.getBankFamilyOffsets())
+        """
+        if index is None:
+            return self.cpp_obj.get().loadEventBuffer()
+        return self.cpp_obj.get().loadEventBuffer(<int32_t>index)
+
 # ==============================================================================
 # Initialization
 # ==============================================================================

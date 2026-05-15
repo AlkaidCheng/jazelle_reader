@@ -83,6 +83,38 @@ namespace jazelle
          */
         bool readEvent(int32_t index, JazelleEvent& event);
 
+        /**
+         * @brief Load the next record's data buffer without parsing the
+         *        MINIDST payload.
+         *
+         * Advances the stream to the next logical record, reads the logical
+         * record header, IEVENTH, PHMTOC, and the raw data block, but stops
+         * before decoding the data block into typed banks. Useful when
+         * MINIDST parsing fails on a particular event and you still want to
+         * inspect the raw bytes.
+         *
+         * After this call, the data buffer accessible via dumpBinary() /
+         * dumpBinaryText() / printBinary() corresponds to this record, and
+         * getBankFamilyOffset(s)() can be used to locate bank families
+         * within it.
+         *
+         * The stream is left in the same position it would be in after a
+         * successful nextRecord(), so subsequent sequential reads are not
+         * affected.
+         *
+         * @return true on success, false on EOF.
+         */
+        bool loadEventBuffer();
+
+        /**
+         * @brief Same as loadEventBuffer(), but for the event at a specific
+         *        index (uses the event index, building it if needed).
+         *
+         * @param index 0-based event index.
+         * @return true on success, false if index is out of range.
+         */
+        bool loadEventBuffer(int32_t index);
+
         // --- File Metadata Accessors ---
 
         /**
@@ -169,10 +201,19 @@ namespace jazelle
         static bool parseEvent(ParseContext& ctx, JazelleEvent& event);
         
         /**
-         * @brief Parse MINIDST data buffer into event
+         * @brief Parse MINIDST data buffer into event.
+         * @param toc Table of contents (bank counts).
+         * @param event Event to populate.
+         * @param buffer Data buffer to read from.
+         * @param family_offsets If non-null, will be populated with a map of
+         *        family name (e.g. "PHCHRG") to its starting byte offset
+         *        within the buffer. This allows offset discovery without
+         *        keeping the parsed event.
          */
-        static void parseMiniDst(const PHMTOC& toc, JazelleEvent& event, 
-                                 const DataBuffer& buffer);
+        static void parseMiniDst(const PHMTOC& toc, JazelleEvent& event,
+                                 const DataBuffer& buffer,
+                                 std::unordered_map<std::string, int32_t>*
+                                     family_offsets = nullptr);
 
         /**
          * @brief Returns the raw binary data of the current event's data buffer.

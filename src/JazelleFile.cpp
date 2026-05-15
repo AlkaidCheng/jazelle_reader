@@ -10,10 +10,14 @@
 #include "DataBuffer.hpp"
 #include <stdexcept>
 #include <algorithm>
-#include <iostream>
 #include <vector>
-#include <thread>
+#include <string>
 #include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <thread>
+#include <unordered_map>
+#include <set>
 
 namespace jazelle
 {
@@ -31,6 +35,9 @@ namespace jazelle
         std::string lastFormat;
         std::vector<int64_t> m_event_offsets;
         bool m_index_built = false;
+
+        PHMTOC lastToc;
+        bool   lastTocValid = false;
 
         explicit Impl(const std::string& filepath)
         {
@@ -52,18 +59,47 @@ namespace jazelle
         bool readCurrentRecord(JazelleEvent& event)
         {
             auto ctx = getParseContext();
-            
-            // We need to capture metadata during parsing
             std::string recordType;
             std::string format;
-            
-            bool success = parseEventWithMetadata(ctx, event, recordType, format);
-            
+            PHMTOC toc;
+
+            bool success = parseEventWithMetadata(
+                ctx, event, recordType, format,
+                /*out_toc=*/&toc,
+                /*parse_minidst=*/true);
+
             if (success) {
                 lastRecordType = recordType;
-                lastFormat = format;
+                lastFormat     = format;
+                lastToc        = toc;
+                lastTocValid   = (format == "MINIDST");
             }
-            
+            return success;
+        }
+
+        /**
+         * @brief Reads event buffer without parsing MINIDST 
+         */
+        bool readCurrentBufferOnly()
+        {
+            auto ctx = getParseContext();
+            std::string recordType;
+            std::string format;
+            PHMTOC toc;
+
+            JazelleEvent scratch;
+
+            bool success = parseEventWithMetadata(
+                ctx, scratch, recordType, format,
+                /*out_toc=*/&toc,
+                /*parse_minidst=*/false);
+
+            if (success) {
+                lastRecordType = recordType;
+                lastFormat     = format;
+                lastToc        = toc;
+                lastTocValid   = (format == "MINIDST");
+            }
             return success;
         }
 
@@ -72,11 +108,12 @@ namespace jazelle
          * DECLARATION - must be static to be called from JazelleFile::parseEvent
          */
         static bool parseEventWithMetadata(
-            JazelleFile::ParseContext& ctx, 
+            JazelleFile::ParseContext& ctx,
             JazelleEvent& event,
             std::string& recordType,
-            std::string& format);
-
+            std::string& format,
+            PHMTOC* out_toc = nullptr,
+            bool parse_minidst = true);
     };
 
     // Static method: Core parsing logic
@@ -84,10 +121,12 @@ namespace jazelle
      * @brief Helper that captures metadata during parsing
      */
     bool JazelleFile::Impl::parseEventWithMetadata(
-        JazelleFile::ParseContext& ctx, 
+        JazelleFile::ParseContext& ctx,
         JazelleEvent& event,
         std::string& recordType,
-        std::string& format)
+        std::string& format,
+        PHMTOC* out_toc,
+        bool parse_minidst)
     {
         try
         {
@@ -142,36 +181,41 @@ namespace jazelle
 
             if (format == "MINIDST")
             {
-
                 if (ctx.stream->getNBytes() != tocoff1) {
                     throw std::runtime_error(
-                        "Consistency Check Failed: 'tocOff' mismatch. Expected: " + 
-                        std::to_string(tocoff1) + ", Actual: " + std::to_string(ctx.stream->getNBytes())
+                        "Consistency Check Failed: 'tocOff' mismatch. Expected: " +
+                        std::to_string(tocoff1) + ", Actual: " +
+                        std::to_string(ctx.stream->getNBytes())
                     );
                 }
-                
+
                 PHMTOC toc(*ctx.stream);
-                
-                if (datrec > 0)
-                {
+
+                if (datrec > 0) {
                     ctx.stream->nextPhysicalRecord();
                 }
 
                 if (ctx.stream->getNBytes() != datoff) {
-                     throw std::runtime_error(
-                        "Consistency Check Failed: 'datOff' mismatch. Expected: " + 
-                        std::to_string(datoff) + ", Actual: " + std::to_string(ctx.stream->getNBytes())
+                    throw std::runtime_error(
+                        "Consistency Check Failed: 'datOff' mismatch. Expected: " +
+                        std::to_string(datoff) + ", Actual: " +
+                        std::to_string(ctx.stream->getNBytes())
                     );
                 }
 
-                // Read the entire data record
+                // Always load the buffer
                 ctx.stream->readToVector(*ctx.rawDataBuffer, datsiz);
                 ctx.dataBufferView->setData(
                     {ctx.rawDataBuffer->data(), static_cast<size_t>(datsiz)}
                 );
-                
-                // Parse the data buffer
-                JazelleFile::parseMiniDst(toc, event, *ctx.dataBufferView);
+
+                // Hand TOC back to caller if requested
+                if (out_toc) *out_toc = toc;
+
+                // Optionally skip MINIDST decoding
+                if (parse_minidst) {
+                    JazelleFile::parseMiniDst(toc, event, *ctx.dataBufferView);
+                }
             }
             
             return true;
@@ -196,11 +240,13 @@ namespace jazelle
     }
 
     // Static method: MINIDST parsing logic
-    void JazelleFile::parseMiniDst(const PHMTOC& toc, JazelleEvent& event, 
-                                   const DataBuffer& buffer)
+    void JazelleFile::parseMiniDst(const PHMTOC& toc, JazelleEvent& event,
+                                   const DataBuffer& buffer,
+                                   std::unordered_map<std::string, int32_t>*
+                                       family_offsets)
     {
         int32_t offset = 0;
-    
+
         auto& mcHeadFam  = event.get<MCHEAD>();
         auto& mcPartFam  = event.get<MCPART>();
         auto& phSumFam   = event.get<PHPSUM>();
@@ -228,11 +274,17 @@ namespace jazelle
         phKChrgFam.reserve(toc.m_nPhKChrg);
         phBmFam.reserve(toc.m_nPhBm);
 
-        // Read MCHead
+        // Helper to record offsets concisely
+        #define RECORD_FAMILY_OFFSET(name) \
+            do { if (family_offsets) (*family_offsets)[name] = offset; } while (0)
+
+        // Read MCHEAD
+        RECORD_FAMILY_OFFSET("MCHEAD");
         MCHEAD* mchead = mcHeadFam.add(1);
         offset += mchead->read(buffer, offset, event);
-        
-        // Read MCPart
+
+        // Read MCPART
+        RECORD_FAMILY_OFFSET("MCPART");
         for (int32_t i = 0; i < toc.m_nMcPart; i++)
         {
             int32_t id = buffer.readInt(offset);
@@ -242,6 +294,7 @@ namespace jazelle
         }
         
         // Read PHPSUM
+        RECORD_FAMILY_OFFSET("PHPSUM");
         for (int32_t i = 0; i < toc.m_nPhPSum; i++)
         {
             int32_t id = buffer.readInt(offset);
@@ -251,6 +304,7 @@ namespace jazelle
         }
         
         // Read PHCHRG
+        RECORD_FAMILY_OFFSET("PHCHRG");
         for (int32_t i = 0; i < toc.m_nPhChrg; i++)
         {
             int32_t id = buffer.readInt(offset);
@@ -260,6 +314,7 @@ namespace jazelle
         }
 
         // Read PHKLUS
+        RECORD_FAMILY_OFFSET("PHKLUS");
         for (int32_t i = 0; i < toc.m_nPhKlus; i++)
         {
             int32_t id = buffer.readInt(offset);
@@ -267,8 +322,9 @@ namespace jazelle
             PHKLUS* phklus = phKlusFam.add(id);
             offset += phklus->read(buffer, offset, event);
         }
-        
+
         // Read PHWIC
+        RECORD_FAMILY_OFFSET("PHWIC");
         for (int32_t i = 0; i < toc.m_nPhWic; i++)
         {
             int32_t id = buffer.readInt(offset);
@@ -278,6 +334,7 @@ namespace jazelle
         }
 
         // Read PHCRID
+        RECORD_FAMILY_OFFSET("PHCRID");
         for (int32_t i = 0; i < toc.m_nPhCrid; i++)
         {
             int32_t id = buffer.readInt(offset) & 0xffff;
@@ -286,6 +343,7 @@ namespace jazelle
         }
 
         // Read PHKTRK
+        RECORD_FAMILY_OFFSET("PHKTRK");
         for (int32_t i = 0; i < toc.m_nPhKTrk; i++)
         {
             int32_t id = buffer.readInt(offset) & 0xffff;
@@ -294,6 +352,7 @@ namespace jazelle
         }
 
         // Read PHKELID
+        RECORD_FAMILY_OFFSET("PHKELID");
         for (int32_t i = 0; i < toc.m_nPhKElId; i++)
         {
             int32_t id = buffer.readInt(offset) & 0xffff;
@@ -302,6 +361,7 @@ namespace jazelle
         }
 
         // Read PHPOINT
+        RECORD_FAMILY_OFFSET("PHPOINT");
         for (int32_t i = 0; i < toc.m_nPhPoint; i++)
         {
             int32_t id = buffer.readInt(offset) & 0xffff;
@@ -311,8 +371,7 @@ namespace jazelle
 
         // ==========================================
         // Read PHKCHRG (Two-Pass Relational Table)
-        // ==========================================
-        
+        RECORD_FAMILY_OFFSET("PHKCHRG");
         // Pass 1: Main Data & Track Key
         for (int32_t i = 0; i < toc.m_nPhKChrg; i++)
         {
@@ -325,7 +384,6 @@ namespace jazelle
         // Pass 2: Cluster Key
         for (int32_t i = 0; i < toc.m_nPhKChrg; i++)
         {
-            // Read the second key array
             int32_t word = buffer.readInt(offset);
             int32_t id = (word >> 16) & 0xffff;
             int32_t phklus_id = word & 0xffff;
@@ -336,13 +394,16 @@ namespace jazelle
                 phkchrg->phklus_id = phklus_id;
             }
         }
-        
+
         // Read PHBM
+        RECORD_FAMILY_OFFSET("PHBM");
         for (int32_t i = 0; i < toc.m_nPhBm; i++)
         {
-           PHBM* phbm = phBmFam.add(1);
-           offset += phbm->read(buffer, offset, event);
+            PHBM* phbm = phBmFam.add(1);
+            offset += phbm->read(buffer, offset, event);
         }
+
+        #undef RECORD_FAMILY_OFFSET
         
         // Resolve MCPART parent pointers
         size_t mcpartSize = mcPartFam.size();
@@ -458,6 +519,7 @@ namespace jazelle
         std::cout << dumpBinaryText(start_offset, end_offset);
     }
 
+
     // --- Public JazelleFile Methods ---
 
     JazelleFile::JazelleFile(const std::string& filepath)
@@ -530,6 +592,34 @@ namespace jazelle
         m_impl->stream->seekTo(offset);
 
         return m_impl->readCurrentRecord(event);
+    }
+
+    bool JazelleFile::loadEventBuffer()
+    {
+        if (!m_impl->stream->nextLogicalRecord())
+        {
+            return false;
+        }
+        return m_impl->readCurrentBufferOnly();
+    }
+
+    bool JazelleFile::loadEventBuffer(int32_t index)
+    {
+        if (!m_impl->m_index_built)
+        {
+            buildIndex();
+        }
+
+        if (index < 0 ||
+            static_cast<size_t>(index) >= m_impl->m_event_offsets.size())
+        {
+            return false;
+        }
+
+        int64_t offset = m_impl->m_event_offsets[index];
+        m_impl->stream->seekTo(offset);
+
+        return m_impl->readCurrentBufferOnly();
     }
 
     // --- Accessors ---
