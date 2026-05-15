@@ -7,7 +7,7 @@ from libcpp.string cimport string
 from libcpp.string_view cimport string_view
 from libcpp.memory cimport unique_ptr
 from libcpp.optional cimport optional
-from libc.stdint cimport int16_t, int32_t, int64_t
+from libc.stdint cimport int16_t, int32_t, int64_t, uint8_t
 from libcpp.chrono cimport system_clock, time_point
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
@@ -203,8 +203,15 @@ cdef extern from "jazelle/JazelleFile.hpp" namespace "jazelle":
         string getLastFormat()
         void rewind() except +
 
+        vector[uint8_t] dumpBinary(int32_t start_offset,
+                                   int32_t end_offset) except +
+        string dumpBinaryText(int32_t start_offset,
+                              int32_t end_offset) except +
+        void printBinary(int32_t start_offset,
+                         int32_t end_offset) except +
+
         vector[CppJazelleEvent] readEventsBatch(
             int32_t start_idx,
             int32_t count,
             size_t num_threads
-        ) except +       
+        ) except +

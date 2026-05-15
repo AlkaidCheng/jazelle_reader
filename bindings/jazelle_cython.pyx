@@ -12,7 +12,7 @@ import inspect
 import cython
 import datetime
 from cython.operator cimport dereference as deref, preincrement as inc
-from libc.stdint cimport int16_t, int32_t
+from libc.stdint cimport uint8_t, int16_t, int32_t
 from libc.string cimport memcpy
 from libc.stdint cimport uintptr_t
 from libcpp.string cimport string
@@ -3624,6 +3624,92 @@ cdef class JazelleFile:
             'last_record_type': self.lastRecordType,
             'last_format': self.lastFormat
         }
+
+    # ========================================================================
+    # Binary Dump (current event's data buffer)
+    # ========================================================================
+
+    def dumpBinary(self, int start_offset = 0, int end_offset = -1) -> bytes:
+        """
+        Return the raw binary data of the current event's data buffer.
+
+        The buffer corresponds to the data portion of the most recently read
+        event (via ``nextRecord()`` or ``readEvent()`` / ``__getitem__``). If
+        no event has been read yet, returns empty ``bytes``.
+
+        Parameters
+        ----------
+        start_offset : int, default 0
+            Byte offset to start from.
+        end_offset : int, default -1
+            Byte offset to stop at. If negative, defaults to the end of the
+            buffer.
+
+        Returns
+        -------
+        bytes
+            Raw bytes from the buffer in ``[start_offset, end_offset)``.
+
+        Examples
+        --------
+        >>> with JazelleFile('data.jazelle') as f:
+        ...     event = f[0]
+        ...     raw = f.dumpBinary()           # whole buffer
+        ...     head = f.dumpBinary(0, 64)     # first 64 bytes
+        """
+        cdef vector[uint8_t] data = self.cpp_obj.get().dumpBinary(
+            <int32_t>start_offset, <int32_t>end_offset
+        )
+        cdef Py_ssize_t n = <Py_ssize_t>data.size()
+        if n == 0:
+            return b''
+        # Slice of a char* with explicit length materializes a Python bytes
+        return (<char*>data.data())[:n]
+
+    def dumpBinaryText(self, int start_offset = 0, int end_offset = -1) -> str:
+        """
+        Return a formatted text representation of the current event's data
+        buffer (offset, hex, int32, upper/lower 16-bit halves, float).
+
+        This is the same formatted output as the original C++ ``dumpBinary``,
+        returned as a string instead of printed.
+
+        Parameters
+        ----------
+        start_offset : int, default 0
+            Byte offset to start from.
+        end_offset : int, default -1
+            Byte offset to stop at. If negative, defaults to the end of the
+            buffer.
+
+        Returns
+        -------
+        str
+            The formatted dump.
+        """
+        return (<bytes>self.cpp_obj.get().dumpBinaryText(
+            <int32_t>start_offset, <int32_t>end_offset
+        )).decode('UTF-8')
+
+    def printBinary(self, int start_offset = 0, int end_offset = -1) -> None:
+        """
+        Print the formatted text dump of the current event's data buffer.
+
+        Equivalent in spirit to the original C++ ``dumpBinary``. Output is
+        written via Python's ``print``, so it interoperates with notebook
+        output capture, ``pytest``'s ``capsys``, and ``sys.stdout``
+        redirection.
+
+        Parameters
+        ----------
+        start_offset : int, default 0
+            Byte offset to start from.
+        end_offset : int, default -1
+            Byte offset to stop at. If negative, defaults to the end of the
+            buffer.
+        """
+        # The text already ends with "\n\n"; suppress print's extra newline.
+        print(self.dumpBinaryText(start_offset, end_offset), end='')
 
 # ==============================================================================
 # Initialization
