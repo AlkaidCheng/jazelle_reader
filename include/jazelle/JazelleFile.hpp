@@ -83,7 +83,6 @@ namespace jazelle
          */
         bool readEvent(int32_t index, JazelleEvent& event);
 
-
         // --- File Metadata Accessors ---
 
         /**
@@ -176,13 +175,44 @@ namespace jazelle
                                  const DataBuffer& buffer);
 
         /**
-         * @brief Helper function to dump raw binary data for reverse engineering.
-         * @param buffer The DataBuffer containing the event data.
-         * @param start_offset The byte offset to start dumping from.
-         * @param end_offset The byte offset to stop dumping at.
+         * @brief Returns the raw binary data of the current event's data buffer.
+         *
+         * The buffer corresponds to the data portion of the most recently read
+         * event (via nextRecord() or readEvent()). If no event has been read
+         * yet, the returned vector is empty.
+         *
+         * @param start_offset Byte offset to start from (default: 0).
+         * @param end_offset   Byte offset to stop at. If negative, defaults to
+         *                     the end of the buffer.
+         * @return Vector of raw bytes in the range [start_offset, end_offset).
          */
-        static void dumpBinary(const DataBuffer& buffer, int32_t start_offset,
-                               int32_t end_offset);
+        std::vector<uint8_t> dumpBinary(int32_t start_offset = 0,
+                                        int32_t end_offset = -1) const;
+
+        /**
+         * @brief Returns a formatted text representation of the current event's
+         *        data buffer (offset, hex, int32, upper/lower 16-bit halves,
+         *        float). This is the original dumpBinary() formatting, returned
+         *        as a string instead of printed.
+         *
+         * @param start_offset Byte offset to start from (default: 0).
+         * @param end_offset   Byte offset to stop at. If negative, defaults to
+         *                     the end of the buffer.
+         * @return Formatted dump string.
+         */
+        std::string dumpBinaryText(int32_t start_offset = 0,
+                                   int32_t end_offset = -1) const;
+
+        /**
+         * @brief Prints the formatted text dump of the current event's data
+         *        buffer to stdout (equivalent to the original dumpBinary).
+         *
+         * @param start_offset Byte offset to start from (default: 0).
+         * @param end_offset   Byte offset to stop at. If negative, defaults to
+         *                     the end of the buffer.
+         */
+        void printBinary(int32_t start_offset = 0,
+                         int32_t end_offset = -1) const;
 
     private:
         /**
