@@ -19,6 +19,7 @@
 #include <memory>
 #include <chrono>
 #include <functional>
+#include <unordered_map>
 
 namespace jazelle
 {
@@ -82,7 +83,6 @@ namespace jazelle
          * @return true if the event was read, false if index is out of bounds.
          */
         bool readEvent(int32_t index, JazelleEvent& event);
-
 
         // --- File Metadata Accessors ---
 
@@ -176,13 +176,19 @@ namespace jazelle
                                  const DataBuffer& buffer);
 
         /**
-         * @brief Helper function to dump raw binary data for reverse engineering.
-         * @param buffer The DataBuffer containing the event data.
-         * @param start_offset The byte offset to start dumping from.
-         * @param end_offset The byte offset to stop dumping at.
+         * @brief Returns the raw binary data of the current event's data buffer.
+         *
+         * The buffer corresponds to the data portion of the most recently read
+         * event (via nextRecord() or readEvent()). If no event has been read
+         * yet, the returned vector is empty.
+         *
+         * @param start_offset Byte offset to start from (default: 0).
+         * @param end_offset   Byte offset to stop at. If negative, defaults to
+         *                     the end of the buffer.
+         * @return Vector of raw bytes in the range [start_offset, end_offset).
          */
-        static void dumpBinary(const DataBuffer& buffer, int32_t start_offset,
-                               int32_t end_offset);
+        std::vector<uint8_t> dumpBinary(int32_t start_offset = 0,
+                                        int32_t end_offset = -1) const;
 
     private:
         /**

@@ -360,67 +360,29 @@ namespace jazelle
         }
     }
 
-    /**
-     * @brief Helper function to dump raw binary data for reverse engineering.
-     * @param buffer The DataBuffer containing the event data.
-     * @param start_offset The byte offset to start dumping from.
-     * @param end_offset The byte offset to stop dumping at.
-     */
-    void JazelleFile::dumpBinary(const DataBuffer& buffer, int32_t start_offset, int32_t end_offset)
+    std::vector<uint8_t> JazelleFile::dumpBinary(int32_t start_offset,
+                                                 int32_t end_offset) const
     {
-        std::cout << "\n========== UNPARSED BINARY DUMP ==========\n";
-        std::cout << "Buffer Total Size: " << buffer.size() << " bytes\n";
-        std::cout << "Start Offset:      " << start_offset << " bytes\n";
-        std::cout << "End Offset:        " << end_offset << " bytes\n";
-        
-        int32_t remaining_bytes = end_offset - start_offset;
-        
-        if (remaining_bytes <= 0) {
-            std::cout << "No bytes to dump (end_offset <= start_offset).\n";
-            std::cout << "==========================================\n\n";
-            return;
+        const int32_t buffer_size =
+            static_cast<int32_t>(m_impl->dataBufferView.size());
+
+        // Sentinel -1 (or any negative) => to end of buffer
+        if (end_offset < 0) {
+            end_offset = buffer_size;
         }
 
-        int32_t words_to_dump = remaining_bytes / 4; // 4 bytes per 32-bit word
-        
-        std::cout << "Dumping " << remaining_bytes << " bytes (" 
-                  << words_to_dump << " words)...\n";
-                  
-        // Expanded header
-        std::cout << std::left << std::setw(10) << "Offset" 
-                  << std::setw(15) << "Hex (32-bit)" 
-                  << std::setw(15) << "Int (32-bit)" 
-                  << std::setw(12) << "Upper 16"
-                  << std::setw(12) << "Lower 16"
-                  << "Float" << std::endl;
-        std::cout << "------------------------------------------------------------------------\n";
-
-        for (int i = 0; i < words_to_dump; i++) 
-        {
-            int32_t current_offset = start_offset + (i * 4);
-            
-            int32_t raw_int = buffer.readInt(current_offset);
-            float raw_float = buffer.readFloat(current_offset);
-            
-            // Extract the 16-bit halves and cast to signed shorts
-            int16_t upper_16 = static_cast<int16_t>((raw_int >> 16) & 0xffff);
-            int16_t lower_16 = static_cast<int16_t>(raw_int & 0xffff);
-
-            // 1. Offset
-            std::cout << "+" << std::left << std::setfill(' ') << std::setw(8) << (i * 4);
-            
-            // 2. Hex
-            std::cout << "0x" << std::right << std::setfill('0') << std::setw(8) 
-                      << std::hex << (uint32_t)raw_int << "        ";
-            
-            // 3. Int32, Upper16, Lower16, and Float
-            std::cout << std::left << std::setfill(' ') << std::dec
-                      << std::setw(15) << raw_int 
-                      << std::setw(12) << upper_16
-                      << std::setw(12) << lower_16
-                      << raw_float << std::endl;
+        // Clamp to valid range
+        if (start_offset < 0)          start_offset = 0;
+        if (start_offset > buffer_size) start_offset = buffer_size;
+        if (end_offset   > buffer_size) end_offset   = buffer_size;
+        if (end_offset <= start_offset) {
+            return {};
         }
-        std::cout << "==========================================\n\n";
+
+        // rawDataBuffer is the owning storage; dataBufferView is the view over
+        // its first dataBufferView.size() bytes for the current event.
+        const uint8_t* data = m_impl->rawDataBuffer.data();
+        return std::vector<uint8_t>(data + start_offset, data + end_offset);
     }
 
 
