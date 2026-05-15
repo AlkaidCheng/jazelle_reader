@@ -4,7 +4,7 @@
  */
 
 #include "jazelle/banks/PHPOINT.hpp"
-#include "DataBuffer.hpp" 
+#include "DataBuffer.hpp"
 
 namespace jazelle
 {
@@ -38,12 +38,12 @@ namespace jazelle
                 o += 2;
 
                 // Map the known bits based on the DUCS template
-                if      (bit == 0) phpsum_id  = ptr; // Explicitly stored
-                else if (bit == 1) phchrg_id  = ptr; 
-                else if (bit == 2) phklus_id  = ptr;
-                else if (bit == 3) phkelid_id = ptr;
-                else if (bit == 4) phwic_id   = ptr;
-                else if (bit == 5) phcrid_id  = ptr;
+                if      (bit == 0) phpsum_id = ptr; // Explicitly stored
+                else if (bit == 1) phcrid_id = ptr;
+                else if (bit == 2) phchrg_id = ptr;
+                else if (bit == 3) phklus_id = ptr;
+                else if (bit == 4) phkelid_id = ptr;
+                else if (bit == 5) phwic_id = ptr;
                 // If SLD used bits 6-15 for tracking other subsystems (like PHKTRK),
                 // they are safely consumed here and the offset pointer advances properly.
             }
