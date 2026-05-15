@@ -283,14 +283,25 @@ namespace jazelle
         MCHEAD* mchead = mcHeadFam.add(1);
         offset += mchead->read(buffer, offset, event);
 
-        // Read MCPART
+        // Read MCPART (variable-size, compressed-format rows — see MCPART.cpp).
         RECORD_FAMILY_OFFSET("MCPART");
         for (int32_t i = 0; i < toc.m_nMcPart; i++)
         {
-            int32_t id = buffer.readInt(offset);
-            offset += 4;
-            MCPART* mcpart = mcPartFam.add(id);
-            offset += mcpart->read(buffer, offset, event);
+            // The bank ID is packed inside the per-row ID-word at row+12 (after
+            // the 12-byte P(3) vector). We peek it here so the family can be
+            // keyed correctly before read() runs.
+            const uint32_t idw =
+                static_cast<uint32_t>(buffer.readInt(offset + 12));
+            const int32_t bank_id = static_cast<int32_t>(idw & 0x1fffu);
+            MCPART* mcpart = mcPartFam.add(bank_id);
+            offset += mcpart->read(buffer, offset, event);   // advances 36 or 40
+        }
+
+        for (size_t i = 0; i < mcPartFam.size(); ++i) {
+            MCPART* part = mcPartFam.at(i);
+            part->parent = (part->parent_id > 0) 
+                           ? mcPartFam.find(part->parent_id) 
+                           : nullptr;
         }
         
         // Read PHPSUM
