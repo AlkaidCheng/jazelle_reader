@@ -7,7 +7,7 @@ from libcpp.string cimport string
 from libcpp.string_view cimport string_view
 from libcpp.memory cimport unique_ptr
 from libcpp.optional cimport optional
-from libc.stdint cimport int16_t, int32_t, int64_t, uint8_t
+from libc.stdint cimport int16_t, int32_t, int64_t, uint8_t, uint16_t
 from libcpp.chrono cimport system_clock, time_point
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
@@ -64,7 +64,7 @@ cdef extern from "jazelle/PHMTOC.hpp" namespace "jazelle":
         int32_t m_nMcBeam
         int32_t m_nPhKElId
         int32_t m_nPhVxOv
-        
+
 # --- Bank Structs (from banks/*.hpp) ---
 # We must declare all bank structs we want to wrap.
 
@@ -89,10 +89,19 @@ cdef extern from "jazelle/banks/MCHEAD.hpp" namespace "jazelle":
 cdef extern from "jazelle/banks/MCPART.hpp" namespace "jazelle":
     cdef cppclass CppMCPART "jazelle::MCPART"(CppBank):
         CppMCPART(int32_t)
-        float e, ptot, charge
+        float px, py, pz
+        float xt_x, xt_y, xt_z
+        float e, charge
         int32_t ptype, origin, parent_id
-        float p[3]
-        float xt[3]
+
+cdef extern from "jazelle/banks/MCPNT.hpp" namespace "jazelle":
+    cdef cppclass CppMCPNT "jazelle::MCPNT"(CppBank):
+        CppMCPNT(int32_t)
+        int32_t mcpart_id
+        int32_t phpoint_id
+        int32_t reason
+        int32_t nhits
+        float   econtrib
 
 cdef extern from "jazelle/banks/PHPSUM.hpp" namespace "jazelle":
     cdef cppclass CppPHPSUM "jazelle::PHPSUM"(CppBank):
@@ -189,6 +198,17 @@ cdef extern from "jazelle/banks/PHBM.hpp" namespace "jazelle":
         float pos[3]
         float dpos[6]
         float pol, dpol
+
+cdef extern from "jazelle/banks/PHWMC.hpp" namespace "jazelle":
+    cdef struct CppPHWMCPair "jazelle::PHWMCPair":
+        uint16_t count
+        uint16_t id
+        int32_t  value
+
+    cdef cppclass CppPHWMC "jazelle::PHWMC"(CppBank):
+        CppPHWMC(int32_t)
+        int32_t word1, word2, total_count, n_pairs
+        vector[CppPHWMCPair] pairs
 
 # --- Main Event Container ---
 

@@ -17,9 +17,9 @@ from .streamers.feather_streamer import to_feather, from_feather
 # Data Structures
 from .jazelle_cython import (
     PIDVEC, CRIDHYP,
-    IEVENTH, MCHEAD, MCPART, PHPSUM, PHCHRG, 
+    IEVENTH, MCHEAD, MCPART, MCPNT, PHPSUM, PHCHRG, 
     PHKLUS, PHWIC, PHCRID, PHKTRK, PHKELID,
-    PHPOINT, PHKCHRG, PHBM
+    PHPOINT, PHKCHRG, PHBM, PHWMC
 )
 
 from .config import display, set_display_options
@@ -57,9 +57,9 @@ __all__ = [
     'to_feather', 'from_feather',
     
     # Banks
-    'IEVENTH', 'MCHEAD', 'MCPART', 'PHPSUM', 'PHCHRG', 
+    'IEVENTH', 'MCHEAD', 'MCPART', 'MCPNT', 'PHPSUM', 'PHCHRG', 
     'PHKLUS', 'PHWIC', 'PHCRID', 'PHKTRK', 'PHKELID',
-    'PIDVEC', 'CRIDHYP', 'PHPOINT', 'PHKCHARG', 'PHBM'
+    'PIDVEC', 'CRIDHYP', 'PHPOINT', 'PHKCHARG', 'PHBM', 'PHWMC'
 
     # Config
     'display', 'set_display_options'

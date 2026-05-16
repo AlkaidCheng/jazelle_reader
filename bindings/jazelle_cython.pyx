@@ -12,7 +12,7 @@ import inspect
 import cython
 import datetime
 from cython.operator cimport dereference as deref, preincrement as inc
-from libc.stdint cimport uint8_t, int16_t, int32_t
+from libc.stdint cimport uint8_t, int16_t, int32_t, uint16_t
 from libc.string cimport memcpy
 from libc.stdint cimport uintptr_t
 from libcpp.string cimport string
@@ -703,10 +703,21 @@ cdef class MCPART(Bank):
         p = <pxd.CppMCPART*>self._ptr
         return f"<MCPART id={p.getId()} ptype={p.ptype} e={p.e:.2f}>"
 
+    # --- Scalar properties ---
+    @property
+    def px(self): return (<pxd.CppMCPART*>self._ptr).px
+    @property
+    def py(self): return (<pxd.CppMCPART*>self._ptr).py
+    @property
+    def pz(self): return (<pxd.CppMCPART*>self._ptr).pz
+    @property
+    def xt_x(self): return (<pxd.CppMCPART*>self._ptr).xt_x
+    @property
+    def xt_y(self): return (<pxd.CppMCPART*>self._ptr).xt_y
+    @property
+    def xt_z(self): return (<pxd.CppMCPART*>self._ptr).xt_z
     @property
     def e(self): return (<pxd.CppMCPART*>self._ptr).e
-    @property
-    def ptot(self): return (<pxd.CppMCPART*>self._ptr).ptot
     @property
     def ptype(self): return (<pxd.CppMCPART*>self._ptr).ptype
     @property
@@ -715,74 +726,72 @@ cdef class MCPART(Bank):
     def origin(self): return (<pxd.CppMCPART*>self._ptr).origin
     @property
     def parent_id(self): return (<pxd.CppMCPART*>self._ptr).parent_id
-    @property
-    def p(self):
-        cdef pxd.CppMCPART* p_obj = <pxd.CppMCPART*>self._ptr
-        return [p_obj.p[i] for i in range(3)]
-    @property
-    def xt(self):
-        cdef pxd.CppMCPART* p_obj = <pxd.CppMCPART*>self._ptr
-        return [p_obj.xt[i] for i in range(3)]
 
     cpdef dict to_dict(self):
         cdef pxd.CppMCPART* ptr = <pxd.CppMCPART*>self._ptr
         return {
-            'id': ptr.getId(), 'e': ptr.e, 'ptot': ptr.ptot,
-            'ptype': ptr.ptype, 'charge': ptr.charge,
-            'origin': ptr.origin, 'parent_id': ptr.parent_id,
-            'p': [ptr.p[i] for i in range(3)],
-            'xt': [ptr.xt[i] for i in range(3)]
+            'id': ptr.getId(),
+            'px': ptr.px, 'py': ptr.py, 'pz': ptr.pz,
+            'e': ptr.e,
+            'ptype': ptr.ptype, 'charge': ptr.charge, 'origin': ptr.origin,
+            'xt_x': ptr.xt_x, 'xt_y': ptr.xt_y, 'xt_z': ptr.xt_z,
+            'parent_id': ptr.parent_id,
         }
 
     @staticmethod
     def bulk_extract(Family family):
         cdef size_t count = len(family)
         cdef pxd.CppIFamily* fam_ptr = family._ptr
-        
-        # Primitives
-        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_id = np.empty(count, dtype=np.int32)
-        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_e = np.empty(count, dtype=np.float32)
-        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_ptot = np.empty(count, dtype=np.float32)
-        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_ptype = np.empty(count, dtype=np.int32)
-        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_charge = np.empty(count, dtype=np.float32)
-        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_origin = np.empty(count, dtype=np.int32)
-        cdef cnp.ndarray[cnp.int32_t, ndim=1] arr_parent = np.empty(count, dtype=np.int32)
-        
-        # Arrays (3-vectors)
-        cdef cnp.ndarray[cnp.float32_t, ndim=2] arr_p = np.empty((count, 3), dtype=np.float32)
-        cdef cnp.ndarray[cnp.float32_t, ndim=2] arr_xt = np.empty((count, 3), dtype=np.float32)
+
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_id      = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_px      = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_py      = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_pz      = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_xt_x    = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_xt_y    = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_xt_z    = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_e       = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_ptype   = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_charge  = np.empty(count, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_origin  = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_parent  = np.empty(count, dtype=np.int32)
+
+        cdef int32_t* r_id     = <int32_t*>arr_id.data
+        cdef float*   r_px     = <float*>  arr_px.data
+        cdef float*   r_py     = <float*>  arr_py.data
+        cdef float*   r_pz     = <float*>  arr_pz.data
+        cdef float*   r_xt_x   = <float*>  arr_xt_x.data
+        cdef float*   r_xt_y   = <float*>  arr_xt_y.data
+        cdef float*   r_xt_z   = <float*>  arr_xt_z.data
+        cdef float*   r_e      = <float*>  arr_e.data
+        cdef int32_t* r_ptype  = <int32_t*>arr_ptype.data
+        cdef float*   r_charge = <float*>  arr_charge.data
+        cdef int32_t* r_origin = <int32_t*>arr_origin.data
+        cdef int32_t* r_parent = <int32_t*>arr_parent.data
 
         cdef size_t i
         cdef pxd.CppMCPART* ptr
-        cdef int32_t* r_id = <int32_t*>arr_id.data
-        cdef float* r_e = <float*>arr_e.data
-        cdef float* r_ptot = <float*>arr_ptot.data
-        cdef int32_t* r_ptype = <int32_t*>arr_ptype.data
-        cdef float* r_charge = <float*>arr_charge.data
-        cdef int32_t* r_origin = <int32_t*>arr_origin.data
-        cdef int32_t* r_parent = <int32_t*>arr_parent.data
-        
-        cdef float* r_p_base = <float*>arr_p.data
-        cdef float* r_xt_base = <float*>arr_xt.data
-
         for i in range(count):
             ptr = <pxd.CppMCPART*>fam_ptr.at(i)
-            r_id[i] = ptr.getId()
-            r_e[i] = ptr.e
-            r_ptot[i] = ptr.ptot
-            r_ptype[i] = ptr.ptype
+            r_id[i]     = ptr.getId()
+            r_px[i]     = ptr.px
+            r_py[i]     = ptr.py
+            r_pz[i]     = ptr.pz
+            r_xt_x[i]   = ptr.xt_x
+            r_xt_y[i]   = ptr.xt_y
+            r_xt_z[i]   = ptr.xt_z
+            r_e[i]      = ptr.e
+            r_ptype[i]  = ptr.ptype
             r_charge[i] = ptr.charge
             r_origin[i] = ptr.origin
             r_parent[i] = ptr.parent_id
-            
-            # Fast array copy (memcpy)
-            memcpy(r_p_base + i*3, &ptr.p[0], 3 * sizeof(float))
-            memcpy(r_xt_base + i*3, &ptr.xt[0], 3 * sizeof(float))
 
         return {
-            'id': arr_id, 'e': arr_e, 'ptot': arr_ptot, 'ptype': arr_ptype, 
-            'charge': arr_charge, 'origin': arr_origin, 'parent_id': arr_parent,
-            'p': arr_p, 'xt': arr_xt
+            'id': arr_id,
+            'px': arr_px, 'py': arr_py, 'pz': arr_pz,
+            'xt_x': arr_xt_x, 'xt_y': arr_xt_y, 'xt_z': arr_xt_z,
+            'e': arr_e, 'ptype': arr_ptype, 'charge': arr_charge,
+            'origin': arr_origin, 'parent_id': arr_parent,
         }
 
     @staticmethod
@@ -799,25 +808,30 @@ cdef class MCPART(Bank):
             r_offsets[i+1] = total
         if total == 0: return {'_offsets': arr_offsets}
 
-        # Allocations
-        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_id = np.empty(total, dtype=np.int32)
-        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_p = np.empty((total, 3), dtype=np.float32)
-        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_e = np.empty(total, dtype=np.float32)
-        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_ptot = np.empty(total, dtype=np.float32)
-        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_ptype = np.empty(total, dtype=np.int32)
-        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_charge = np.empty(total, dtype=np.float32)
-        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_origin = np.empty(total, dtype=np.int32)
-        cdef cnp.ndarray[cnp.float32_t, ndim=2] r_xt = np.empty((total, 3), dtype=np.float32)
-        cdef cnp.ndarray[cnp.int32_t, ndim=1] r_parent_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_id        = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_px        = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_py        = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_pz        = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_xt_x      = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_xt_y      = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_xt_z      = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_e         = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_ptype     = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_charge    = np.empty(total, dtype=np.float32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_origin    = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_parent_id = np.empty(total, dtype=np.int32)
 
-        cdef int32_t* p_id = <int32_t*>r_id.data
-        cdef float* p_p = <float*>r_p.data
-        cdef float* p_e = <float*>r_e.data
-        cdef float* p_ptot = <float*>r_ptot.data
-        cdef int32_t* p_ptype = <int32_t*>r_ptype.data
-        cdef float* p_charge = <float*>r_charge.data
-        cdef int32_t* p_origin = <int32_t*>r_origin.data
-        cdef float* p_xt = <float*>r_xt.data
+        cdef int32_t* p_id        = <int32_t*>r_id.data
+        cdef float*   p_px        = <float*>  r_px.data
+        cdef float*   p_py        = <float*>  r_py.data
+        cdef float*   p_pz        = <float*>  r_pz.data
+        cdef float*   p_xt_x      = <float*>  r_xt_x.data
+        cdef float*   p_xt_y      = <float*>  r_xt_y.data
+        cdef float*   p_xt_z      = <float*>  r_xt_z.data
+        cdef float*   p_e         = <float*>  r_e.data
+        cdef int32_t* p_ptype     = <int32_t*>r_ptype.data
+        cdef float*   p_charge    = <float*>  r_charge.data
+        cdef int32_t* p_origin    = <int32_t*>r_origin.data
         cdef int32_t* p_parent_id = <int32_t*>r_parent_id.data
 
         cdef size_t g_idx = 0, j
@@ -828,31 +842,162 @@ cdef class MCPART(Bank):
             fam = &batch.at(i).get[pxd.CppMCPART]()
             for j in range(fam.size()):
                 b = <pxd.CppMCPART*>fam.at(j)
-                p_id[g_idx] = b.getId()
-                memcpy(p_p + (g_idx*3), &b.p[0], 12)
-                p_e[g_idx] = b.e
-                p_ptot[g_idx] = b.ptot
-                p_ptype[g_idx] = b.ptype
-                p_charge[g_idx] = b.charge
-                p_origin[g_idx] = b.origin
-                memcpy(p_xt + (g_idx*3), &b.xt[0], 12)
+                p_id[g_idx]        = b.getId()
+                p_px[g_idx]        = b.px
+                p_py[g_idx]        = b.py
+                p_pz[g_idx]        = b.pz
+                p_xt_x[g_idx]      = b.xt_x
+                p_xt_y[g_idx]      = b.xt_y
+                p_xt_z[g_idx]      = b.xt_z
+                p_e[g_idx]         = b.e
+                p_ptype[g_idx]     = b.ptype
+                p_charge[g_idx]    = b.charge
+                p_origin[g_idx]    = b.origin
                 p_parent_id[g_idx] = b.parent_id
                 g_idx += 1
 
         return {
-            '_offsets': arr_offsets, 
-            'id': r_id, 
-            'p': r_p, 
-            'e': r_e, 
-            'ptot': r_ptot, 
-            'ptype': r_ptype, 
-            'charge': r_charge, 
-            'origin': r_origin, 
-            'xt': r_xt, 
-            'parent_id': r_parent_id
+            '_offsets': arr_offsets,
+            'id': r_id,
+            'px': r_px, 'py': r_py, 'pz': r_pz,
+            'xt_x': r_xt_x, 'xt_y': r_xt_y, 'xt_z': r_xt_z,
+            'e': r_e, 'ptype': r_ptype, 'charge': r_charge,
+            'origin': r_origin, 'parent_id': r_parent_id,
         }
 
+        
+cdef class MCPNT(Bank):
+    """Wrapper for MCPNT (MCPART <-> PHPOINT relational table) Bank.
 
+    Each MCPNT entry links one MCPART to one PHPOINT and records why the
+    relationship exists (REASON bitmask), how many tracking hits the
+    MCPART contributed (NHITS), and how much energy it contributed to
+    the KAL cluster (ECONTRIB).
+    """
+    def __init__(self): raise TypeError("No direct instantiation")
+
+    def __repr__(self):
+        p = <pxd.CppMCPNT*>self._ptr
+        return (f"<MCPNT id={p.getId()} mcpart={p.mcpart_id} "
+                f"phpoint={p.phpoint_id} econtrib={p.econtrib:.3f}>")
+
+    # --- Scalar properties ---
+    @property
+    def mcpart_id(self): return (<pxd.CppMCPNT*>self._ptr).mcpart_id
+    @property
+    def phpoint_id(self): return (<pxd.CppMCPNT*>self._ptr).phpoint_id
+    @property
+    def reason(self): return (<pxd.CppMCPNT*>self._ptr).reason
+    @property
+    def nhits(self): return (<pxd.CppMCPNT*>self._ptr).nhits
+    @property
+    def econtrib(self): return (<pxd.CppMCPNT*>self._ptr).econtrib
+
+    cpdef dict to_dict(self):
+        cdef pxd.CppMCPNT* ptr = <pxd.CppMCPNT*>self._ptr
+        return {
+            'id': ptr.getId(),
+            'mcpart_id': ptr.mcpart_id,
+            'phpoint_id': ptr.phpoint_id,
+            'reason': ptr.reason,
+            'nhits': ptr.nhits,
+            'econtrib': ptr.econtrib,
+        }
+
+    @staticmethod
+    def bulk_extract(Family family):
+        cdef size_t count = len(family)
+        cdef pxd.CppIFamily* fam_ptr = family._ptr
+
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_id         = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_mcpart_id  = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_phpoint_id = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_reason     = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] arr_nhits      = np.empty(count, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] arr_econtrib   = np.empty(count, dtype=np.float32)
+
+        cdef int32_t* r_id         = <int32_t*>arr_id.data
+        cdef int32_t* r_mcpart_id  = <int32_t*>arr_mcpart_id.data
+        cdef int32_t* r_phpoint_id = <int32_t*>arr_phpoint_id.data
+        cdef int32_t* r_reason     = <int32_t*>arr_reason.data
+        cdef int32_t* r_nhits      = <int32_t*>arr_nhits.data
+        cdef float*   r_econtrib   = <float*>  arr_econtrib.data
+
+        cdef size_t i
+        cdef pxd.CppMCPNT* ptr
+        for i in range(count):
+            ptr = <pxd.CppMCPNT*>fam_ptr.at(i)
+            r_id[i]         = ptr.getId()
+            r_mcpart_id[i]  = ptr.mcpart_id
+            r_phpoint_id[i] = ptr.phpoint_id
+            r_reason[i]     = ptr.reason
+            r_nhits[i]      = ptr.nhits
+            r_econtrib[i]   = ptr.econtrib
+
+        return {
+            'id': arr_id,
+            'mcpart_id': arr_mcpart_id,
+            'phpoint_id': arr_phpoint_id,
+            'reason': arr_reason,
+            'nhits': arr_nhits,
+            'econtrib': arr_econtrib,
+        }
+
+    @staticmethod
+    cdef dict extract_from_vector(vector[pxd.CppJazelleEvent]* batch):
+        cdef size_t count = batch.size()
+        if count == 0: return {}
+
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] arr_offsets = np.empty(count + 1, dtype=np.int64)
+        cdef int64_t* r_offsets = <int64_t*>arr_offsets.data
+        r_offsets[0] = 0
+        cdef size_t total = 0, i
+        for i in range(count):
+            total += batch.at(i).get[pxd.CppMCPNT]().size()
+            r_offsets[i+1] = total
+        if total == 0: return {'_offsets': arr_offsets}
+
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_id         = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_mcpart_id  = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_phpoint_id = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_reason     = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.int32_t,   ndim=1] r_nhits      = np.empty(total, dtype=np.int32)
+        cdef cnp.ndarray[cnp.float32_t, ndim=1] r_econtrib   = np.empty(total, dtype=np.float32)
+
+        cdef int32_t* p_id         = <int32_t*>r_id.data
+        cdef int32_t* p_mcpart_id  = <int32_t*>r_mcpart_id.data
+        cdef int32_t* p_phpoint_id = <int32_t*>r_phpoint_id.data
+        cdef int32_t* p_reason     = <int32_t*>r_reason.data
+        cdef int32_t* p_nhits      = <int32_t*>r_nhits.data
+        cdef float*   p_econtrib   = <float*>  r_econtrib.data
+
+        cdef size_t g_idx = 0, j
+        cdef pxd.CppFamily[pxd.CppMCPNT]* fam
+        cdef pxd.CppMCPNT* b
+
+        for i in range(count):
+            fam = &batch.at(i).get[pxd.CppMCPNT]()
+            for j in range(fam.size()):
+                b = <pxd.CppMCPNT*>fam.at(j)
+                p_id[g_idx]         = b.getId()
+                p_mcpart_id[g_idx]  = b.mcpart_id
+                p_phpoint_id[g_idx] = b.phpoint_id
+                p_reason[g_idx]     = b.reason
+                p_nhits[g_idx]      = b.nhits
+                p_econtrib[g_idx]   = b.econtrib
+                g_idx += 1
+
+        return {
+            '_offsets': arr_offsets,
+            'id': r_id,
+            'mcpart_id': r_mcpart_id,
+            'phpoint_id': r_phpoint_id,
+            'reason': r_reason,
+            'nhits': r_nhits,
+            'econtrib': r_econtrib,
+        }
+
+        
 cdef class PHPSUM(Bank):
     """Wrapper for PHPSUM (Physics Particle Summary) Bank."""
     def __init__(self): raise TypeError("No direct instantiation")
@@ -2775,6 +2920,57 @@ cdef class PHBM(Bank):
             'pos': r_pos, 'dpos': r_dpos
         }
 
+cdef class PHWMC(Bank):
+    """Wrapper for PHWMC bank.
+
+    The PHWMC template has not been sourced yet, so semantic field
+    names are partial. The byte layout is solid: 20-byte fixed prefix
+    plus n_pairs * 8-byte pair entries. Downstream banks (MCPNT, etc.)
+    parse cleanly once the offset is advanced past PHWMC.
+
+    Fields:
+      word1, word2     : prefix fields whose purpose is not yet known
+      total_count      : sum of pair.count across all pair entries
+      n_pairs          : number of pair entries (drives variable size)
+      pairs            : list of {'count', 'id', 'value'} dicts
+    """
+    def __init__(self): raise TypeError("No direct instantiation")
+
+    def __repr__(self):
+        p = <pxd.CppPHWMC*>self._ptr
+        return (f"<PHWMC id={p.getId()} n_pairs={p.n_pairs} "
+                f"total_count={p.total_count}>")
+
+    @property
+    def word1(self): return (<pxd.CppPHWMC*>self._ptr).word1
+    @property
+    def word2(self): return (<pxd.CppPHWMC*>self._ptr).word2
+    @property
+    def total_count(self): return (<pxd.CppPHWMC*>self._ptr).total_count
+    @property
+    def n_pairs(self): return (<pxd.CppPHWMC*>self._ptr).n_pairs
+
+    @property
+    def pairs(self):
+        cdef pxd.CppPHWMC* p = <pxd.CppPHWMC*>self._ptr
+        cdef size_t i, n = p.pairs.size()
+        return [
+            {'count': p.pairs[i].count,
+             'id':    p.pairs[i].id,
+             'value': p.pairs[i].value}
+            for i in range(n)
+        ]
+
+    cpdef dict to_dict(self):
+        cdef pxd.CppPHWMC* p = <pxd.CppPHWMC*>self._ptr
+        return {
+            'id': p.getId(),
+            'word1': p.word1,
+            'word2': p.word2,
+            'total_count': p.total_count,
+            'n_pairs': p.n_pairs,
+            'pairs': self.pairs,
+        }
 
 # ==============================================================================
 # JazelleEvent Wrapper
@@ -2815,6 +3011,8 @@ cdef class JazelleEvent:
     def mchead(self): return wrap_family(&self.cpp_event.get[pxd.CppMCHEAD](), self, MCHEAD)
     @property
     def mcpart(self): return wrap_family(&self.cpp_event.get[pxd.CppMCPART](), self, MCPART)
+    @property
+    def mcpnt(self): return wrap_family(&self.cpp_event.get[pxd.CppMCPNT](), self, MCPNT)
     @property
     def phpsum(self): return wrap_family(&self.cpp_event.get[pxd.CppPHPSUM](), self, PHPSUM)
     @property
@@ -4067,6 +4265,7 @@ cdef void _init_extractors():
     register_extractor(b"IEVENTH", IEVENTH.extract_from_vector)
     register_extractor(b"MCHEAD",  MCHEAD.extract_from_vector)
     register_extractor(b"MCPART",  MCPART.extract_from_vector)
+    register_extractor(b"MCPNT",  MCPNT.extract_from_vector)
     register_extractor(b"PHPSUM",  PHPSUM.extract_from_vector)
     register_extractor(b"PHCHRG",  PHCHRG.extract_from_vector)
     register_extractor(b"PHKLUS",  PHKLUS.extract_from_vector)

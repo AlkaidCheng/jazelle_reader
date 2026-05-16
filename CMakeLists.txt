@@ -56,6 +56,7 @@ add_library(jazelle_reader_core STATIC
     src/banks/IEVENTH.cpp
     src/banks/MCHEAD.cpp
     src/banks/MCPART.cpp
+    src/banks/MCPNT.cpp
     src/banks/PHCHRG.cpp
     src/banks/PHCRID.cpp
     src/banks/PHEVCL.cpp
@@ -68,6 +69,7 @@ add_library(jazelle_reader_core STATIC
     src/banks/PHPOINT.cpp
     src/banks/PHBM.cpp
     src/banks/PHKCHRG.cpp
+    src/banks/PHWMC.cpp
 )
 target_include_directories(jazelle_reader_core PUBLIC include src)
 

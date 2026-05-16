@@ -15,6 +15,7 @@
 #include "IEVENTH.hpp"
 #include "MCHEAD.hpp"
 #include "MCPART.hpp"
+#include "MCPNT.hpp"
 #include "PHPSUM.hpp"
 #include "PHCHRG.hpp"
 #include "PHKLUS.hpp"
@@ -26,6 +27,7 @@
 #include "PHPOINT.hpp"
 #include "PHEVCL.hpp"
 #include "PHKCHRG.hpp"
+#include "PHWMC.hpp"
 
 // ... Add any other banks referenced in PHMTOC.hpp here ...
 // (We have covered all banks referenced in MINIDST.java)

@@ -249,6 +249,7 @@ namespace jazelle
 
         auto& mcHeadFam  = event.get<MCHEAD>();
         auto& mcPartFam  = event.get<MCPART>();
+        auto& mcPntFam  = event.get<MCPNT>();
         auto& phSumFam   = event.get<PHPSUM>();
         auto& phChrgFam  = event.get<PHCHRG>();
         auto& phKlusFam  = event.get<PHKLUS>();
@@ -259,10 +260,11 @@ namespace jazelle
         auto& phPointFam = event.get<PHPOINT>();
         auto& phKChrgFam = event.get<PHKCHRG>();
         auto& phBmFam    = event.get<PHBM>();
-    
-        // Pre-allocate memory
-        mcHeadFam.reserve(1); 
+        auto& phWMCFam   = event.get<PHWMC>();
+
+        mcHeadFam.reserve(1);
         mcPartFam.reserve(toc.m_nMcPart);
+        mcPntFam.reserve(toc.m_nMcPnt);
         phSumFam.reserve(toc.m_nPhPSum);
         phChrgFam.reserve(toc.m_nPhChrg);
         phKlusFam.reserve(toc.m_nPhKlus);
@@ -273,6 +275,7 @@ namespace jazelle
         phPointFam.reserve(toc.m_nPhPoint);
         phKChrgFam.reserve(toc.m_nPhKChrg);
         phBmFam.reserve(toc.m_nPhBm);
+        phWMCFam.reserve(toc.m_nPhWMC);
 
         // Helper to record offsets concisely
         #define RECORD_FAMILY_OFFSET(name) \
@@ -283,14 +286,25 @@ namespace jazelle
         MCHEAD* mchead = mcHeadFam.add(1);
         offset += mchead->read(buffer, offset, event);
 
-        // Read MCPART
+        // Read MCPART (variable-size, compressed-format rows — see MCPART.cpp).
         RECORD_FAMILY_OFFSET("MCPART");
         for (int32_t i = 0; i < toc.m_nMcPart; i++)
         {
-            int32_t id = buffer.readInt(offset);
-            offset += 4;
-            MCPART* mcpart = mcPartFam.add(id);
-            offset += mcpart->read(buffer, offset, event);
+            // The bank ID is packed inside the per-row ID-word at row+12 (after
+            // the 12-byte P(3) vector). We peek it here so the family can be
+            // keyed correctly before read() runs.
+            const uint32_t idw =
+                static_cast<uint32_t>(buffer.readInt(offset + 12));
+            const int32_t bank_id = static_cast<int32_t>(idw & 0x1fffu);
+            MCPART* mcpart = mcPartFam.add(bank_id);
+            offset += mcpart->read(buffer, offset, event);   // advances 36 or 40
+        }
+
+        for (size_t i = 0; i < mcPartFam.size(); ++i) {
+            MCPART* part = mcPartFam.at(i);
+            part->parent = (part->parent_id > 0) 
+                           ? mcPartFam.find(part->parent_id) 
+                           : nullptr;
         }
         
         // Read PHPSUM
@@ -369,7 +383,42 @@ namespace jazelle
             offset += phpoint->read(buffer, offset, event);
         }
 
-        // ==========================================
+        // PHWMC — variable-size: 20 + 8*n_pairs bytes per bank
+        RECORD_FAMILY_OFFSET("PHWMC");
+        for (int32_t i = 0; i < toc.m_nPhWMC; ++i) {
+            const int32_t bank_id = buffer.readInt(offset);   // bank_id is at +0
+            PHWMC* b = phWMCFam.add(bank_id);
+            offset += b->read(buffer, offset, event);
+        }
+
+        // Read MCPNT (two-pass: Pass 1 in MCPART-key order, Pass 2 in PHPOINT-key order)
+        RECORD_FAMILY_OFFSET("MCPNT");
+        // Pass 1 — 16 bytes per entry, MCPART-key traversal order
+        for (int32_t i = 0; i < toc.m_nMcPnt; i++)
+        {
+            // Peek MCPNT_id from the high 16 bits of the header word.
+            const uint32_t hdr =
+                static_cast<uint32_t>(buffer.readInt(offset));
+            const int32_t mcpnt_id = static_cast<int32_t>((hdr >> 16) & 0xffffu);
+        
+            MCPNT* mcpnt = mcPntFam.add(mcpnt_id);
+            offset += mcpnt->read(buffer, offset, event);   // returns 16
+        }
+        // Pass 2 — 4 bytes per entry, PHPOINT-key traversal order
+        for (int32_t i = 0; i < toc.m_nMcPnt; i++)
+        {
+            const uint32_t pair =
+                static_cast<uint32_t>(buffer.readInt(offset));
+            offset += 4;
+            const int32_t mcpnt_id   = static_cast<int32_t>((pair >> 16) & 0xffffu);
+            const int32_t phpoint_id = static_cast<int32_t>( pair        & 0xffffu);
+        
+            if (MCPNT* mcpnt = mcPntFam.find(mcpnt_id)) {
+                mcpnt->phpoint_id = phpoint_id;
+            }
+        }
+
+        /*
         // Read PHKCHRG (Two-Pass Relational Table)
         RECORD_FAMILY_OFFSET("PHKCHRG");
         // Pass 1: Main Data & Track Key
@@ -404,21 +453,8 @@ namespace jazelle
         }
 
         #undef RECORD_FAMILY_OFFSET
+        */
         
-        // Resolve MCPART parent pointers
-        size_t mcpartSize = mcPartFam.size();
-        for (size_t i = 0; i < mcpartSize; ++i)
-        {
-            MCPART* part = mcPartFam.at(i);
-            if (part && part->parent_id > 0)
-            {
-                part->parent = mcPartFam.find(part->parent_id);
-            }
-            else if (part)
-            {
-                part->parent = nullptr;
-            }
-        }
     }
 
     std::vector<uint8_t> JazelleFile::dumpBinary(int32_t start_offset,
@@ -598,7 +634,7 @@ namespace jazelle
     {
         if (!m_impl->stream->nextLogicalRecord())
         {
-            return false;
+            return false; // Clean EOF
         }
         return m_impl->readCurrentBufferOnly();
     }
